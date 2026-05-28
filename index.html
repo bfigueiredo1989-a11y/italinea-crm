@@ -384,7 +384,7 @@ function buildApp(){
   const totalAlerts=role==="vendedor"?alertN:alertN+pend;
 
   let nav=[];
-  if(role==="gestor")     nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas do Dia",b:totalAlerts,bc:"amb"},{k:"leads",i:"👥",l:"Leads",b:newN},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"kanban",i:"🗂",l:"Kanban"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"relatorios",i:"📈",l:"Relatórios"},{k:"vendedores",i:"👤",l:"Vendedores"},{k:"sheets",i:"🔗",l:"Google Sheets"}];
+  if(role==="gestor")     nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas do Dia",b:totalAlerts,bc:"amb"},{k:"leads",i:"👥",l:"Leads",b:newN},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"kanban",i:"🗂",l:"Kanban"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"relatorios",i:"📈",l:"Relatórios"},{k:"vendedores",i:"👤",l:"Vendedores"},{k:"sheets",i:"🔗",l:"Google Sheets"},{k:"conta",i:"🔑",l:"Minha Conta"}];
   else if(role==="distrib") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas",b:pend+alertN,bc:"pur"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"leads",i:"👥",l:"Leads"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
   else if(role==="agencia") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"leads",i:"👥",l:"Leads"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"kanban",i:"🗂",l:"Kanban"},{k:"relatorios",i:"📈",l:"Relatórios"}];
   else nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Meus Alertas",b:alertN,bc:"amb"},{k:"leads",i:"👥",l:"Meus Leads",b:newN},{k:"kanban",i:"🗂",l:"Kanban"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
@@ -451,17 +451,12 @@ function buildLogin(){
       <div style="font-size:9px;color:#C41E3A;text-transform:uppercase;letter-spacing:3px;margin-top:2px">Lead Manager</div>
     </div>
     <div style="margin-bottom:12px"><label style="display:block;font-size:11px;color:rgba(255,255,255,.4);margin-bottom:4px">E-mail</label>
-    <input id="li-em" class="li" value="fabio@italinea.com.br" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <input id="li-em" class="li" placeholder="seu@email.com.br" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div style="margin-bottom:16px"><label style="display:block;font-size:11px;color:rgba(255,255,255,.4);margin-bottom:4px">Senha</label>
-    <input id="li-pw" type="password" class="li" value="fabio2025" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <input id="li-pw" type="password" class="li" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div id="li-err" style="display:none" class="alert al-red">❌ E-mail ou senha incorretos</div>
     <button class="btn btn-red btn-full" style="margin-top:8px" onclick="doLogin()">Entrar →</button>
-    <div style="height:1px;background:rgba(255,255,255,.08);margin:16px 0"></div>
-    <div style="font-size:10px;color:rgba(255,255,255,.25)">
-      ${S.users.filter(u=>u.ativo).map(u=>`<div style="margin-bottom:3px;display:flex;align-items:center;gap:5px">
-        <span class="role-tag ${u.role==="gestor"?"rt-g":u.role==="distrib"?"rt-d":u.role==="agencia"?"rt-a":"rt-v"}">${{gestor:"gerente",distrib:"distrib",vendedor:"vendedor",agencia:"agência"}[u.role]}</span>
-        ${u.email} / ${u.pass}</div>`).join("")}
-    </div>
+
   </div></div>`;
 }
 
