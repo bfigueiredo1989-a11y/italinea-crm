@@ -843,23 +843,72 @@ function buildKanban(ml){
 
 // ─── AGENDA ───────────────────────────────────────────────────────────────────
 function buildAgenda(ml){
-  const atr=ml.filter(l=>l.follow&&l.follow<today()&&!["Venda fechada","Venda perdida"].includes(l.status));
-  const hj=ml.filter(l=>l.follow===today()&&!["Venda fechada","Venda perdida"].includes(l.status));
-  const sem=ml.filter(l=>{if(!l.follow)return false;const d=(new Date(l.follow+"T12:00:00")-new Date())/86400000;return d>0&&d<=7;});
-  function sec(title,items,color){
-    return`<div style="margin-bottom:20px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:${color||"#A1A1AA"};margin-bottom:10px">${title} (${items.length})</div>
-    ${items.length===0?`<div style="text-align:center;padding:16px 0;color:#A1A1AA">Nenhum</div>`:
-    items.map(l=>{const v=S.users.find(x=>x.id===l.vid);return`<div class="card" style="padding:11px 13px;margin-bottom:8px;cursor:pointer;border-left:3px solid ${color||"#E4E4E7"}" onclick="openLead(${l.id})">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:600;font-size:13px">${l.nome}</span>${prioBdg(l.prio)}</div>
-      <div style="font-size:11px;color:#A1A1AA;margin-bottom:5px">${l.interesse} · ${v?.nome||""}${l.follow?` · 📅 ${fmtD(l.follow)}`:""}</div>${stsBdg(l.status)}
-    </div>`;}).join("")}</div>`;
+  const ativos=ml.filter(l=>!["Venda fechada","Venda perdida"].includes(l.status));
+  const atr=ativos.filter(l=>l.follow&&l.follow<today());
+  const hj=ativos.filter(l=>l.follow===today());
+  const sem=ativos.filter(l=>{if(!l.follow)return false;const d=(new Date(l.follow+"T12:00:00")-new Date())/86400000;return d>0&&d<=7;});
+
+  function etapaLabel(l){
+    const map={"Novo lead":"📥 Novo","Sem resposta":"📵 Sem resposta","Contato pendente":"📞 Aguardando","Em atendimento":"🔍 Qualificação","Lead qualificado":"🏠 Visita","Visita agendada":"📋 Orçamento","Orçamento enviado":"🤝 Negociação","Negociação":"🤝 Negociação"};
+    return map[l.status]||l.status;
   }
-  return`<div class="g3">
+
+  function cardAgenda(l, corBorda){
+    const v=S.users.find(x=>x.id===l.vid);
+    const atraso=l.follow&&l.follow<today();
+    const temp=l.temp||"Frio";
+    const tempCor=temp==="Quente"?"#C41E3A":temp==="Morno"?"#D97706":"#2563EB";
+    const tempIco=temp==="Quente"?"🔥":temp==="Morno"?"🌤":"❄️";
+    return `<div class="card" style="padding:14px;margin-bottom:10px;border-left:4px solid ${corBorda};cursor:pointer" onclick="openLead(${l.id})">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.nome}</div>
+          <div style="font-size:11px;color:#A1A1AA;margin-top:2px">${l.interesse} · ${l.orc}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+          <span style="background:${tempCor}22;color:${tempCor};font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px">${tempIco} ${temp}</span>
+          ${prioBdg(l.prio)}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <span style="background:#F0F0F0;color:#52525B;font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px">${etapaLabel(l)}</span>
+        ${v?`<span style="font-size:11px;color:#A1A1AA">👤 ${v.nome}</span>`:""}
+      </div>
+      ${l.followAssunto?`<div style="background:#FEF9C3;border-radius:8px;padding:8px 10px;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#92400E;text-transform:uppercase;margin-bottom:2px">📌 O que abordar</div>
+        <div style="font-size:12px;color:#78350F">${l.followAssunto}</div>
+      </div>`:""}
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:12px;font-weight:600;color:${atraso?"#C41E3A":"#D97706"}">${atraso?"⚠️ Atrasado — ":"📅 "}${fmtD(l.follow)}</span>
+        <span style="font-size:11px;color:#A1A1AA">${l.tentativas} contato${l.tentativas!==1?"s":""}</span>
+      </div>
+    </div>`;
+  }
+
+  function sec(title,items,cor){
+    if(items.length===0)return"";
+    return`<div style="margin-bottom:20px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:${cor};margin-bottom:10px">${title} (${items.length})</div>
+      ${items.map(l=>cardAgenda(l,cor)).join("")}
+    </div>`;
+  }
+
+  const total=atr.length+hj.length+sem.length;
+  return`<div>
+  <div class="metrics" style="margin-bottom:16px">
     <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Atrasados</div><div class="mv" style="color:#C41E3A">${atr.length}</div></div>
     <div class="mc"><div class="mc-bar" style="background:#D97706"></div><div class="ml">Hoje</div><div class="mv" style="color:#D97706">${hj.length}</div></div>
     <div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Esta Semana</div><div class="mv" style="color:#2563EB">${sem.length}</div></div>
   </div>
-  ${sec("⚠️ Atrasados",atr,"#C41E3A")}${sec("📅 Hoje",hj,"#D97706")}${sec("📆 Esta Semana",sem,"#2563EB")}`;
+  ${total===0?`<div style="text-align:center;padding:60px 20px;color:#A1A1AA">
+    <div style="font-size:48px;margin-bottom:12px">✅</div>
+    <div style="font-size:16px;font-weight:600;color:#18181B;margin-bottom:6px">Agenda limpa!</div>
+    <div style="font-size:13px">Nenhum follow-up pendente. Bom trabalho!</div>
+  </div>`:""}
+  ${sec("⚠️ Atrasados — contate agora!",atr,"#C41E3A")}
+  ${sec("📅 Hoje",hj,"#D97706")}
+  ${sec("📆 Esta Semana",sem,"#2563EB")}
+  </div>`;
 }
 
 
@@ -1125,7 +1174,7 @@ function buildDetalhe(l){
     <span class="badge b-gray" style="padding:8px 12px;font-size:12px">👁️ Somente visualização</span>
   </div>`}
   <div class="tabs">
-    ${[["info","Dados"],["historico","Histórico"],["followup","Follow-up"],["jornada","Jornada"]].map(([t,lbl])=>`<button class="tab ${tab===t?"active":""}" onclick="S.detailTab='${t}';rerenderContent()">${lbl}</button>`).join("")}
+    ${[["info","Dados"],["jornada","Jornada"],["followup","Follow-up"],["historico","Histórico"]].map(([t,lbl])=>`<button class="tab ${tab===t?"active":""}" onclick="S.detailTab='${t}';rerenderContent()">${lbl}</button>`).join("")}
   </div>${tabContent}</div>`;
 }
 
@@ -1815,8 +1864,56 @@ window.doHisto=function(){
   if(respondeu==="sim"){
     setTimeout(()=>perguntarAvancarEtapa(upd),300);
   } else {
-    rerenderContent();
+    // Sem resposta: perguntar se quer agendar próximo contato
+    setTimeout(()=>perguntarAgendarFollowup(upd, novoFollow, novasTentativas),300);
   }
+};
+
+// Perguntar se quer agendar follow-up após contato sem resposta
+function perguntarAgendarFollowup(l, datasugerida, tentativa){
+  const horaLabel = tentativa===1 ? "daqui 4 horas" :
+                    tentativa===2 ? "amanhã" :
+                    tentativa===3 ? "em 2 dias" : "em 2 dias";
+  const dataFmt = datasugerida ? fmtD(datasugerida) : "—";
+  abrirModalNativo(
+    "📅 Agendar Próximo Contato?",
+    '<div style="text-align:center;padding:8px 0">'+
+    '<div style="font-size:36px;margin-bottom:10px">📵</div>'+
+    '<div style="font-size:14px;font-weight:700;margin-bottom:6px">Cliente não respondeu</div>'+
+    '<div style="font-size:12px;color:#52525B;margin-bottom:16px">Tente novamente '+horaLabel+'</div>'+
+    '<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:12px 16px;margin-bottom:14px;text-align:left">'+
+    '<div style="font-size:10px;font-weight:700;color:#92400E;text-transform:uppercase;margin-bottom:4px">📅 Sugestão de follow-up</div>'+
+    '<div style="font-size:16px;font-weight:700;color:#D97706">'+dataFmt+'</div>'+
+    '<div style="font-size:11px;color:#92400E;margin-top:2px">Tentativa #'+(tentativa+1)+'</div>'+
+    '</div>'+
+    '<div class="fg" style="text-align:left">'+
+    '<label style="font-size:11px;font-weight:600;color:#52525B;display:block;margin-bottom:4px">Ajustar data (opcional)</label>'+
+    '<input type="date" id="fu-data" value="'+l.follow+'" style="width:100%;padding:8px 12px;border:1.5px solid #E4E4E7;border-radius:8px;font-size:13px;font-family:inherit">'+
+    '</div>'+
+    '<div class="fg" style="text-align:left">'+
+    '<label style="font-size:11px;font-weight:600;color:#52525B;display:block;margin-bottom:4px">O que abordar nesse contato?</label>'+
+    '<input type="text" id="fu-assunto" placeholder="Ex: Reforçar interesse, oferecer visita..." style="width:100%;padding:8px 12px;border:1.5px solid #E4E4E7;border-radius:8px;font-size:13px;font-family:inherit">'+
+    '</div></div>',
+    '<button onclick="fecharModalNativo();rerenderContent()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#F0F0F0;cursor:pointer;font-size:13px">Não agendar</button>'+
+    '<button onclick="confirmarFollowupAuto('+l.id+')" style="flex:1;padding:10px;border-radius:8px;border:none;background:#D97706;color:#fff;cursor:pointer;font-size:13px;font-weight:600">📅 Agendar</button>'
+  );
+}
+
+window.confirmarFollowupAuto = function(leadId) {
+  const dataEl = document.getElementById('fu-data');
+  const assuntoEl = document.getElementById('fu-assunto');
+  const data = dataEl?.value || today();
+  const assunto = assuntoEl?.value || "";
+  const l = S.leads.find(x=>x.id===leadId);
+  if(!l) return;
+  // Salvar follow-up e assunto
+  const upd = {...l, follow: data, followAssunto: assunto};
+  S.leads = S.leads.map(x=>x.id===leadId?upd:x);
+  if(S.sel?.id===leadId) S.sel=upd;
+  fecharModalNativo();
+  salvarDados();
+  toast("📅 Follow-up agendado para "+fmtD(data),"amb");
+  rerenderContent();
 };
 
 // Perguntar se quer avançar etapa após contato com resposta
@@ -1864,6 +1961,59 @@ window.avancarEtapa=function(){
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
   S.sel=upd; fecharModalNativo(); salvarDados();
   toast("🚀 Etapa avançada: "+novoStatus,"grn");
+  // Perguntar se quer agendar follow-up para a nova etapa
+  setTimeout(()=>perguntarFollowupEtapa(upd, novoStatus),300);
+};
+
+function perguntarFollowupEtapa(l, etapa){
+  const dicas = {
+    "Lead qualificado": "Peça as medidas do ambiente e tire as dúvidas sobre o projeto",
+    "Visita agendada":  "Confirmar visita, preparar apresentação do showroom",
+    "Orçamento enviado":"Acompanhar se o cliente recebeu e tirar dúvidas do orçamento",
+    "Negociação":       "Negociar condições, prazo e forma de pagamento",
+  };
+  const dica = dicas[etapa] || "Acompanhar o andamento";
+  // Sugerir follow-up em 2 dias
+  const sugestao = new Date();
+  sugestao.setDate(sugestao.getDate()+2);
+  const dataFu = sugestao.toISOString().split("T")[0];
+
+  abrirModalNativo(
+    "📅 Agendar Follow-up?",
+    '<div style="text-align:center;padding:8px 0">'+
+    '<div style="font-size:36px;margin-bottom:10px">🚀</div>'+
+    '<div style="font-size:14px;font-weight:700;margin-bottom:6px">Etapa avançada!</div>'+
+    '<div style="font-size:12px;color:#52525B;margin-bottom:16px">Quer agendar o próximo contato com '+l.nome.split(" ")[0]+'?</div>'+
+    '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 16px;margin-bottom:14px;text-align:left">'+
+    '<div style="font-size:10px;font-weight:700;color:#1E40AF;text-transform:uppercase;margin-bottom:4px">💡 O que abordar</div>'+
+    '<div style="font-size:13px;color:#1D4ED8">'+dica+'</div>'+
+    '</div>'+
+    '<div class="fg" style="text-align:left">'+
+    '<label style="font-size:11px;font-weight:600;color:#52525B;display:block;margin-bottom:4px">Data do próximo contato</label>'+
+    '<input type="date" id="fu-etapa-data" value="'+dataFu+'" style="width:100%;padding:8px 12px;border:1.5px solid #E4E4E7;border-radius:8px;font-size:13px;font-family:inherit">'+
+    '</div>'+
+    '<div class="fg" style="text-align:left">'+
+    '<label style="font-size:11px;font-weight:600;color:#52525B;display:block;margin-bottom:4px">O que precisa fazer nesse contato?</label>'+
+    '<input type="text" id="fu-etapa-assunto" value="'+dica+'" style="width:100%;padding:8px 12px;border:1.5px solid #E4E4E7;border-radius:8px;font-size:13px;font-family:inherit">'+
+    '</div></div>',
+    '<button onclick="fecharModalNativo();rerenderContent()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#F0F0F0;cursor:pointer;font-size:13px">Não agora</button>'+
+    '<button onclick="confirmarFollowupEtapa('+l.id+')" style="flex:1;padding:10px;border-radius:8px;border:none;background:#2563EB;color:#fff;cursor:pointer;font-size:13px;font-weight:600">📅 Agendar</button>'
+  );
+}
+
+window.confirmarFollowupEtapa = function(leadId) {
+  const dataEl = document.getElementById('fu-etapa-data');
+  const assuntoEl = document.getElementById('fu-etapa-assunto');
+  const data = dataEl?.value || today();
+  const assunto = assuntoEl?.value || "";
+  const l = S.leads.find(x=>x.id===leadId);
+  if(!l) return;
+  const upd = {...l, follow: data, followAssunto: assunto};
+  S.leads = S.leads.map(x=>x.id===leadId?upd:x);
+  if(S.sel?.id===leadId) S.sel=upd;
+  fecharModalNativo();
+  salvarDados();
+  toast("📅 Follow-up agendado para "+fmtD(data),"blu");
   rerenderContent();
 };
 window.doEditObs=function(){
