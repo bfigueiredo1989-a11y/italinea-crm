@@ -130,7 +130,7 @@ body{background:var(--bg);color:#18181B;font-size:14px;overflow:hidden;height:10
 <body>
 <div id="root"></div>
 <div id="toast" class="toast"></div>
-<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;align-items:flex-end;justify-content:center" onclick="if(event.target===this)fecharModalNativo()"><div id="modal-box" style="background:#fff;border-radius:18px 18px 0 0;width:100%;max-width:520px;max-height:92dvh;overflow-y:auto"><div style="width:36px;height:4px;background:#D4D4D8;border-radius:2px;margin:10px auto 0"></div><div id="modal-hd" style="padding:14px 18px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #E4E4E7"><span id="modal-title" style="font-size:15px;font-weight:700"></span><button onclick="fecharModalNativo()" style="background:#F0F0F0;border:none;cursor:pointer;padding:4px 10px;border-radius:6px;font-size:13px">✕</button></div><div id="modal-body" style="padding:16px 18px"></div><div id="modal-footer" style="padding:12px 18px;border-top:1px solid #E4E4E7;display:flex;gap:8px"></div></div></div>
+<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fecharModalNativo()"><div id="modal-box" style="background:#fff;border-radius:16px;width:100%;max-width:520px;max-height:90dvh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="height:8px"></div><div id="modal-hd" style="padding:14px 18px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #E4E4E7"><span id="modal-title" style="font-size:15px;font-weight:700"></span><button onclick="fecharModalNativo()" style="background:#F0F0F0;border:none;cursor:pointer;padding:4px 10px;border-radius:6px;font-size:13px">✕</button></div><div id="modal-body" style="padding:16px 18px"></div><div id="modal-footer" style="padding:12px 18px;border-top:1px solid #E4E4E7;display:flex;gap:8px"></div></div></div>
 <script>
 // ─── ESTADO GLOBAL ────────────────────────────────────────────────────────────
 const S = {
@@ -349,6 +349,13 @@ function buildNotifBanner(){
       .slice(0,3).forEach(l=>items.push({cor:"#D97706",txt:`⚠️ Follow-up atrasado: ${l.nome}`,sub:`Vendedor: ${S.users.find(u=>u.id===l.vid)?.nome||"—"}`,id:l.id}));
   }
   if(role==="gestor"||role==="agencia"||role==="distrib"){
+    // Aviso de importação diária
+    const ultimaImport=S.lastImport?new Date(S.lastImport):null;
+    const hoje=today();
+    const importouHoje=ultimaImport&&S.lastImport&&S.lastImport.includes(hoje.split("-").reverse().join("/"));
+    if(!importouHoje && (role==="gestor"||role==="distrib")){
+      items.push({cor:"#2563EB",txt:"📥 Importe os leads de hoje",sub:"Acesse Google Sheets → Importar Leads Agora",id:null,link:"sheets"});
+    }
     const pend=S.leads.filter(l=>l.vid===null).length;
     const p1=S.leads.filter(l=>l.prio===1&&!["Venda fechada","Venda perdida"].includes(l.status)&&l.tentativas===0).length;
     const atr=S.leads.filter(l=>l.follow&&l.follow<today()&&!["Venda fechada","Venda perdida"].includes(l.status)).length;
@@ -390,10 +397,10 @@ function buildApp(){
   const totalAlerts=role==="vendedor"?alertN:alertN+pend;
 
   let nav=[];
-  if(role==="gestor")     nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas do Dia",b:totalAlerts,bc:"amb"},{k:"leads",i:"👥",l:"Leads",b:newN},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"kanban",i:"🗂",l:"Kanban"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"relatorios",i:"📈",l:"Relatórios"},{k:"vendedores",i:"👤",l:"Vendedores"},{k:"sheets",i:"🔗",l:"Google Sheets"},{k:"conta",i:"🔑",l:"Minha Conta"}];
+  if(role==="gestor")     nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas do Dia",b:totalAlerts,bc:"amb"},{k:"leads",i:"👥",l:"Leads",b:newN},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"relatorios",i:"📈",l:"Relatórios"},{k:"vendedores",i:"👤",l:"Vendedores"},{k:"sheets",i:"🔗",l:"Google Sheets"},{k:"conta",i:"🔑",l:"Minha Conta"}];
   else if(role==="distrib") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas",b:pend+alertN,bc:"pur"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"leads",i:"👥",l:"Leads"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
-  else if(role==="agencia") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"leads",i:"👥",l:"Leads"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"kanban",i:"🗂",l:"Kanban"},{k:"relatorios",i:"📈",l:"Relatórios"}];
-  else nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Meus Alertas",b:alertN,bc:"amb"},{k:"leads",i:"👥",l:"Meus Leads",b:newN},{k:"kanban",i:"🗂",l:"Kanban"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
+  else if(role==="agencia") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"leads",i:"👥",l:"Leads"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"relatorios",i:"📈",l:"Relatórios"}];
+  else nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Meus Alertas",b:alertN,bc:"amb"},{k:"leads",i:"👥",l:"Meus Leads",b:newN},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
 
   const TITLES={dash:"Dashboard",alertas:"Alertas do Dia",leads:"Leads",distribuicao:"Distribuição",kanban:"Kanban",agenda:"Agenda",relatorios:"Relatórios",vendedores:"Vendedores",sheets:"Google Sheets",conta:"Minha Conta"};
 
