@@ -142,7 +142,7 @@ const S = {
     {id:4,role:"agencia", nome:"Bruno (Anthropic)",  email:"bruno@anthropic.com",   pass:"bruno2025", av:"BR",ativo:true},
   ],
   user:null, screen:"dash", leads:[], sel:null, modal:null, sideOpen:false,
-  detailTab:"info", relTab:"mensal", distribFiltro:"pendentes",
+  detailTab:"info", relTab:"visaoMensal", relMes:5, relAno:2026, distribFiltro:"pendentes",
   leadFiltro:{q:"",prio:"",status:""},
   showNotif:true,
   nextUserId:5,
@@ -182,6 +182,7 @@ function salvarDados() {
       users: S.users,
       nextUserId: S.nextUserId,
       metaMensal: S.metaMensal,
+      sheetsFromDate: S.sheetsFromDate,
       sheetsUrl: S.sheetsUrl,
       sheetsMapeamento: S.sheetsMapeamento,
       importLog: S.importLog,
@@ -201,6 +202,7 @@ function carregarDados() {
     if (dados.users)           S.users         = dados.users;
     if (dados.nextUserId)      S.nextUserId    = dados.nextUserId;
     if (dados.metaMensal!=null) S.metaMensal   = dados.metaMensal;
+    if (dados.sheetsFromDate)   S.sheetsFromDate = dados.sheetsFromDate;
     if (dados.sheetsUrl)       S.sheetsUrl     = dados.sheetsUrl;
     if (dados.sheetsMapeamento) S.sheetsMapeamento = dados.sheetsMapeamento;
     if (dados.importLog)       S.importLog     = dados.importLog;
@@ -974,10 +976,17 @@ function gerarLinkWhatsApp(l) {
   const nomeCliente = l.nome.split(" ")[0]; // primeiro nome
   const interesse = l.interesse || "móveis planejados";
 
+  // Adaptar interesse para português natural
+  const interAdj = interesse.toLowerCase().includes("casa")?"casa completa planejada":
+    interesse.toLowerCase().includes("cozinha")?"cozinha planejada":
+    interesse.toLowerCase().includes("dormit")||interesse.toLowerCase().includes("quarto")?"dormitório planejado":
+    interesse.toLowerCase().includes("banhe")?"banheiro planejado":
+    interesse+" planejado";
+
   const msg = `Olá, ${nomeCliente}! 😊 Tudo bem?`
     + `\n\nMeu nome é ${vendedor}, da *Italínea Novo Visual* 🏠`
-    + `\n\nVi que você demonstrou interesse em *${interesse}* e gostaríamos de te ajudar a realizar esse sonho! ✨`
-    + `\n\nPosso te passar mais informações e agendar uma visita sem compromisso à nossa loja? 🛋️`;
+    + `\n\nVi que você demonstrou interesse em *${interAdj}*.`
+    + `\n\nPor favor me passe o que imagina do seu projeto para ajudarmos. 🛋️`;
 
   return `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
 }
@@ -1187,181 +1196,311 @@ function buildDetalhe(l){
 
 // ─── RELATÓRIOS ───────────────────────────────────────────────────────────────
 function buildRelatorios(){
-  const leads=S.leads, fech=leads.filter(l=>l.status==="Venda fechada"&&l.dataFechamento);
-  const perd=leads.filter(l=>l.status==="Venda perdida");
-  const valTotal=fech.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0);
-  const ticket=fech.length?valTotal/fech.length:0;
-  const pct=(n,d)=>d>0?((n/d)*100).toFixed(0)+"%":"0%";
-  const tab=S.relTab||"mensal", ano=2025;
-  const porMes=MESES.map((_,mi)=>{
-    const lf=fech.filter(l=>{const d=new Date(l.dataFechamento+"T12:00:00");return d.getFullYear()===ano&&d.getMonth()===mi;});
-    const le=leads.filter(l=>{const d=new Date(l.entrada+"T12:00:00");return d.getFullYear()===ano&&d.getMonth()===mi;});
-    return{qtd:lf.length,val:lf.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0),ent:le.length};
-  });
-  const maxQ=Math.max(...porMes.map(m=>m.qtd),1), maxV=Math.max(...porMes.map(m=>m.val),1);
-  const acum=porMes.map((_,i)=>porMes.slice(0,i+1).reduce((a,m)=>a+m.val,0));
-  const maxAcum=Math.max(...acum,1);
-  const comJornada=fech.filter(l=>l.entrada&&l.dataFechamento);
-  const tempos=comJornada.map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
-  const tempoMedio=tempos.length?Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length):0;
+  const leads=S.leads;
+  const isAnalista=["gestor","agencia"].includes(S.user?.role);
+  const tab=S.relTab||"visaoMensal";
+  const MESES_NOMES=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
-  const isAnalista = ["gestor","agencia"].includes(S.user?.role);
-  const tabsHtml=`<div class="tabs"><button class="tab ${tab==="mensal"?"active":""}" onclick="S.relTab='mensal';rerenderContent()">📅 Por Mês</button><button class="tab ${tab==="jornada"?"active":""}" onclick="S.relTab='jornada';rerenderContent()">🗺️ Jornada</button><button class="tab ${tab==="anual"?"active":""}" onclick="S.relTab='anual';rerenderContent()">📊 Acumulado</button><button class="tab ${tab==="vendedores"?"active":""}" onclick="S.relTab='vendedores';rerenderContent()">👥 Vendedores</button>${isAnalista?`<button class="tab ${tab==="aproveitamento"?"active":""}" onclick="S.relTab='aproveitamento';rerenderContent()">🔍 Aproveitamento</button>`:""}</div>`;
-  const metricsTop=`<div class="metrics">
-    <div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Total Leads</div><div class="mv" style="color:#2563EB">${leads.length}</div></div>
-    <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Fechadas</div><div class="mv" style="color:#16A34A">${fech.length}</div></div>
-    <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Perdidos</div><div class="mv" style="color:#C41E3A">${perd.length}</div></div>
-    <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Valor Total</div><div class="mv" style="color:#16A34A;font-size:15px">${valTotal>0?fmtM(valTotal):"—"}</div></div>
-    <div class="mc"><div class="mc-bar" style="background:#D97706"></div><div class="ml">Ticket Médio</div><div class="mv" style="color:#D97706;font-size:15px">${ticket>0?fmtM(ticket):"—"}</div></div>
-    <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Conversão</div><div class="mv" style="color:#16A34A">${pct(fech.length,leads.length)}</div></div>
+  // Seletor de mês/ano
+  const mesSel = S.relMes!==undefined ? S.relMes : new Date().getMonth();
+  const anoSel = S.relAno || 2026;
+  const nomeMesSel = MESES_NOMES[mesSel];
+
+  // Tabs
+  const tabsHtml=`<div class="tabs" style="overflow-x:auto;flex-wrap:nowrap;display:flex;gap:4px;margin-bottom:14px">
+    <button class="tab ${tab==="visaoMensal"?"active":""}" onclick="S.relTab='visaoMensal';rerenderContent()">📅 Visão Mensal</button>
+    <button class="tab ${tab==="jornada"?"active":""}" onclick="S.relTab='jornada';rerenderContent()">⏱️ Jornada</button>
+    <button class="tab ${tab==="vendedores"?"active":""}" onclick="S.relTab='vendedores';rerenderContent()">👥 Vendedores</button>
+    ${isAnalista?`<button class="tab ${tab==="metricas"?"active":""}" onclick="S.relTab='metricas';rerenderContent()">🔍 Métricas</button>`:""}
   </div>`;
 
-  if(tab==="mensal")return metricsTop+tabsHtml+`
-    <div class="card" style="margin-bottom:14px;padding:16px">
-      <div class="sec-title">Fechamentos por mês — ${ano}</div>
-      <div class="month-chart">${porMes.slice(0,6).map((m,i)=>`<div class="month-bar-wrap"><div class="month-bar-cont"><div class="month-bar" style="background:${m.qtd>0?"#C41E3A":"#E4E4E7"};height:${Math.round((m.qtd/maxQ)*54)+4}px"></div></div><div class="month-label">${MESES[i]}</div><div class="month-val" style="color:${m.qtd>0?"#C41E3A":"#A1A1AA"}">${m.qtd||"—"}</div></div>`).join("")}</div>
-      <div style="height:1px;background:var(--bdr);margin:12px 0"></div>
-      <div class="month-chart">${porMes.slice(6).map((m,i)=>`<div class="month-bar-wrap"><div class="month-bar-cont"><div class="month-bar" style="background:${m.qtd>0?"#C41E3A":"#E4E4E7"};height:${Math.round((m.qtd/maxQ)*54)+4}px"></div></div><div class="month-label">${MESES[i+6]}</div><div class="month-val" style="color:${m.qtd>0?"#C41E3A":"#A1A1AA"}">${m.qtd||"—"}</div></div>`).join("")}</div>
-    </div>
-    <div class="card" style="padding:16px">
-      <div class="sec-title">Entradas vs Fechamentos — ${ano}</div>
-      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:360px">
-        <thead><tr style="background:#F7F7F8"><th style="padding:8px;text-align:left;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Mês</th><th style="padding:8px;text-align:center;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Entradas</th><th style="padding:8px;text-align:center;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Fechamentos</th><th style="padding:8px;text-align:right;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Valor</th></tr></thead>
-        <tbody>${MESES.map((m,i)=>{const d=porMes[i];return`<tr style="border-bottom:1px solid #F4F4F5"><td style="padding:8px;font-weight:500">${MESES_FULL[i]}</td><td style="padding:8px;text-align:center;color:#2563EB;font-weight:${d.ent>0?600:400}">${d.ent||"—"}</td><td style="padding:8px;text-align:center;color:#16A34A;font-weight:${d.qtd>0?700:400}">${d.qtd||"—"}</td><td style="padding:8px;text-align:right;color:#16A34A;font-weight:${d.val>0?600:400}">${d.val>0?fmtM(d.val):"—"}</td></tr>`;}).join("")}</tbody>
-      </table></div>
-    </div>`;
+  // Seletor de mês
+  const mesSelectorHtml=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button onclick="if(S.relMes>0){S.relMes--;}else{S.relMes=11;S.relAno=(S.relAno||2026)-1;}rerenderContent()" style="background:#F0F0F0;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:16px">‹</button>
+    <div style="font-size:16px;font-weight:700;flex:1;text-align:center">${nomeMesSel} ${anoSel}</div>
+    <button onclick="if(S.relMes<11){S.relMes++;}else{S.relMes=0;S.relAno=(S.relAno||2026)+1;}rerenderContent()" style="background:#F0F0F0;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:16px">›</button>
+  </div>`;
 
-  if(tab==="jornada")return metricsTop+tabsHtml+`
-    <div class="g3"><div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Tempo Médio</div><div class="mv" style="color:#2563EB">${tempoMedio}d</div><div class="ms">entrada→fechamento</div></div>
-    <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Mais Rápido</div><div class="mv" style="color:#16A34A">${tempos.length?Math.min(...tempos):0}d</div></div>
-    <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Mais Longo</div><div class="mv" style="color:#C41E3A">${tempos.length?Math.max(...tempos):0}d</div></div></div>
-    <div class="card" style="padding:16px">
-      <div class="sec-title">Jornada por cliente</div>
-      ${comJornada.map(l=>{const e=new Date(l.entrada+"T12:00:00"),f=new Date(l.dataFechamento+"T12:00:00"),dias=Math.round((f-e)/(1000*60*60*24)),v=S.users.find(x=>x.id===l.vid);return`<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #F4F4F5;flex-wrap:wrap">
-        <div style="flex:1;min-width:100px"><div style="font-weight:600;font-size:13px">${l.nome}</div><div style="font-size:11px;color:#A1A1AA">${v?.nome||""} · ${l.interesse}</div></div>
-        <div style="text-align:center;min-width:44px"><div style="font-size:10px;color:#A1A1AA">Entrada</div><div style="font-size:12px;font-weight:600">${MESES[e.getMonth()]}</div></div>
-        <div style="color:#A1A1AA">→</div>
-        <div style="text-align:center;min-width:50px"><div style="font-size:10px;color:#A1A1AA">Fechou</div><div style="font-size:12px;font-weight:600;color:#16A34A">${MESES[f.getMonth()]}</div></div>
-        <span class="badge b-blu" style="min-width:46px;justify-content:center">${dias}d</span>
-        <div style="font-weight:700;font-size:12px;color:#16A34A;min-width:76px;text-align:right">${fmtM(l.valorVenda)}</div>
-      </div>`;}).join("")||`<div style="text-align:center;padding:24px;color:#A1A1AA">Nenhum fechamento registrado</div>`}
-    </div>`;
+  // ── VISÃO MENSAL ─────────────────────────────────────────────────────────────
+  if(tab==="visaoMensal"){
+    // Leads captados no mês (por data de entrada)
+    const captadosMes = leads.filter(l=>{
+      const d=new Date(l.entrada+"T12:00:00");
+      return d.getMonth()===mesSel&&d.getFullYear()===anoSel;
+    });
+    // Fechamentos no mês (por data de fechamento - independente de quando entrou)
+    const fechadosMes = leads.filter(l=>{
+      if(l.status!=="Venda fechada"||!l.dataFechamento)return false;
+      const d=new Date(l.dataFechamento+"T12:00:00");
+      return d.getMonth()===mesSel&&d.getFullYear()===anoSel;
+    });
+    // Fechamentos de leads de meses anteriores que fecharam neste mês
+    const fechadosDeOutrosMeses = fechadosMes.filter(l=>{
+      const e=new Date(l.entrada+"T12:00:00");
+      return !(e.getMonth()===mesSel&&e.getFullYear()===anoSel);
+    });
+    const perdidosMes = leads.filter(l=>{
+      if(l.status!=="Venda perdida")return false;
+      const hist=l.hist||[];
+      if(hist.length===0)return false;
+      const ultimo=new Date(hist[hist.length-1].data+"T12:00:00");
+      return ultimo.getMonth()===mesSel&&ultimo.getFullYear()===anoSel;
+    });
+    const emNegociacaoMes = leads.filter(l=>
+      ["Em atendimento","Lead qualificado","Visita agendada","Orçamento enviado","Negociação"].includes(l.status)
+    );
+    const distribuídosMes = captadosMes.filter(l=>l.distribuidoPor!=null);
+    const receitaMes = fechadosMes.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0);
+    const ticketMes = fechadosMes.length>0?receitaMes/fechadosMes.length:0;
+    const convMes = captadosMes.length>0?((fechadosMes.length/captadosMes.length)*100).toFixed(0):0;
 
-  if(tab==="anual")return metricsTop+tabsHtml+`
-    <div class="card" style="padding:16px;margin-bottom:14px">
-      <div class="sec-title">Acumulado ${ano}</div>
-      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:320px">
-        <thead><tr style="background:#F7F7F8"><th style="padding:8px;text-align:left;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Mês</th><th style="padding:8px;text-align:center;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Vendas</th><th style="padding:8px;text-align:right;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Mês</th><th style="padding:8px;text-align:right;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Acumulado</th></tr></thead>
-        <tbody>${MESES.map((m,i)=>{const d=porMes[i],ac=acum[i];return`<tr style="border-bottom:1px solid #F4F4F5"><td style="padding:8px;font-weight:500">${MESES_FULL[i]}</td><td style="padding:8px;text-align:center;color:#16A34A;font-weight:${d.qtd>0?700:400}">${d.qtd||"—"}</td><td style="padding:8px;text-align:right;color:#16A34A;font-weight:${d.val>0?600:400}">${d.val>0?fmtM(d.val):"—"}</td><td style="padding:8px;text-align:right;font-weight:700;color:${ac>0?"#2563EB":"#A1A1AA"}">${ac>0?fmtM(ac):"—"}</td></tr>`;}).join("")}
-        <tr style="background:#F7F7F8;border-top:2px solid var(--bdr)"><td style="padding:8px;font-weight:700">TOTAL ANUAL</td><td style="padding:8px;text-align:center;font-weight:700;color:#16A34A">${fech.length}</td><td style="padding:8px;text-align:right;font-weight:700;color:#16A34A">${fmtM(valTotal)}</td><td style="padding:8px;text-align:right;font-weight:700;color:#2563EB">${fmtM(valTotal)}</td></tr>
-        </tbody></table></div>
-    </div>
-    <div class="card" style="padding:16px"><div class="sec-title">Evolução acumulada</div>
-      ${acum.filter(v=>v>0).length===0?`<div style="text-align:center;padding:16px;color:#A1A1AA">Sem dados</div>`:
-      acum.map((ac,i)=>ac>0?`<div class="bar-row"><div style="font-size:11px;color:#52525B;flex-shrink:0;text-align:right;width:35px">${MESES[i]}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round((ac/maxAcum)*100)}%;background:#2563EB"></div></div><div style="font-size:11px;font-weight:600;color:#2563EB;width:80px">${fmtM(ac)}</div></div>`:""
-      ).join("")}
-    </div>`;
-
-  // APROVEITAMENTO (só gestor e agência)
-  if(tab==="aproveitamento"){
-    const mesA = new Date().getMonth(), anoA = new Date().getFullYear();
-    const nomeMesA = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][mesA];
-    const leadsMes = leads.filter(l=>{const d=new Date(l.entrada+"T12:00:00");return d.getMonth()===mesA&&d.getFullYear()===anoA;});
-    const fechMes  = leadsMes.filter(l=>l.status==="Venda fechada");
-    const perdMes  = leadsMes.filter(l=>l.status==="Venda perdida");
-    const negMes   = leadsMes.filter(l=>["Negociação","Orçamento enviado","Visita agendada","Lead qualificado","Em atendimento"].includes(l.status));
-    const distMes  = leadsMes.filter(l=>l.distribuidoPor!=null);
-    const naoDistMes = leadsMes.filter(l=>!l.distribuidoPor);
-    const desperdicadosMes = perdMes.filter(l=>(l.tentativas||0)<3);
-    const pctAprov = distMes.length>0 ? ((fechMes.length/distMes.length)*100).toFixed(0) : 0;
-    const pctDesp  = perdMes.length>0 ? ((desperdicadosMes.length/perdMes.length)*100).toFixed(0) : 0;
-
-    // Por vendedor
-    const analVend = vendedoresAtivos().map(v=>{
-      const vl = leadsMes.filter(l=>l.vid===v.id);
-      const vf = vl.filter(l=>l.status==="Venda fechada");
-      const vp = vl.filter(l=>l.status==="Venda perdida");
-      const vd = vp.filter(l=>(l.tentativas||0)<3);
-      const vn = vl.filter(l=>["Negociação","Orçamento enviado","Visita agendada","Lead qualificado","Em atendimento"].includes(l.status));
-      return{v,vl,vf,vp,vd,vn};
+    // Por vendedor no mês
+    const porVend = vendedoresAtivos().map(v=>{
+      const vc = captadosMes.filter(l=>l.vid===v.id);
+      const vf = fechadosMes.filter(l=>l.vid===v.id);
+      const vr = vf.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0);
+      const vn = emNegociacaoMes.filter(l=>l.vid===v.id);
+      const vp = perdidosMes.filter(l=>l.vid===v.id);
+      return{v,vc,vf,vr,vn,vp};
     });
 
-    return metricsTop+tabsHtml+`
-    <div style="margin-bottom:16px">
-      <div style="font-size:16px;font-weight:700">🔍 Análise de Aproveitamento</div>
-      <div style="font-size:12px;color:#A1A1AA">${nomeMesA} ${anoA}</div>
-    </div>
-
+    return tabsHtml+mesSelectorHtml+`
     <!-- Cards resumo -->
-    <div class="metrics" style="margin-bottom:14px">
-      <div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Leads no Mês</div><div class="mv" style="color:#2563EB">${leadsMes.length}</div><div class="ms">${distMes.length} distribuídos</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Fechados</div><div class="mv" style="color:#16A34A">${fechMes.length}</div><div class="ms">${pctAprov}% de conversão</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#D97706"></div><div class="ml">Em Negociação</div><div class="mv" style="color:#D97706">${negMes.length}</div><div class="ms">oportunidades abertas</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Perdidos</div><div class="mv" style="color:#C41E3A">${perdMes.length}</div><div class="ms">${desperdicadosMes.length} c/ menos de 3 contatos</div></div>
+    <div class="metrics" style="grid-template-columns:repeat(3,1fr)">
+      <div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Captados</div><div class="mv" style="color:#2563EB">${captadosMes.length}</div><div class="ms">${distribuídosMes.length} distribuídos</div></div>
+      <div class="mc"><div class="mc-bar" style="background:#D97706"></div><div class="ml">Em Negociação</div><div class="mv" style="color:#D97706">${emNegociacaoMes.length}</div><div class="ms">leads ativos</div></div>
+      <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Fechados</div><div class="mv" style="color:#16A34A">${fechadosMes.length}</div><div class="ms">${convMes}% conversão</div></div>
+      <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Perdidos</div><div class="mv" style="color:#C41E3A">${perdidosMes.length}</div></div>
+      <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Receita</div><div class="mv" style="color:#16A34A;font-size:14px">${receitaMes>0?fmtM(receitaMes):"—"}</div></div>
+      <div class="mc"><div class="mc-bar" style="background:#D97706"></div><div class="ml">Ticket Médio</div><div class="mv" style="color:#D97706;font-size:14px">${ticketMes>0?fmtM(ticketMes):"—"}</div></div>
     </div>
 
-    <!-- Alerta de leads desperdiçados -->
-    ${desperdicadosMes.length>0?`<div class="alert al-red" style="margin-bottom:14px">
-      ⚠️ <strong>${desperdicadosMes.length} lead(s) descartado(s) com menos de 3 contatos</strong> — ${pctDesp}% dos leads perdidos foram desperdiçados sem esforço suficiente.
+    ${fechadosDeOutrosMeses.length>0?`<div class="alert al-grn" style="margin-bottom:14px">
+      ✨ <strong>${fechadosDeOutrosMeses.length} venda(s)</strong> fechadas este mês vieram de leads captados em meses anteriores — ${fmtM(fechadosDeOutrosMeses.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0))} em receita de pipeline anterior.
     </div>`:""}
 
-    <!-- Funil do mês -->
-    <div class="card" style="padding:16px;margin-bottom:14px">
-      <div class="sec-title">Funil de Vendas — ${nomeMesA}</div>
-      ${[
-        {l:"Leads Recebidos", n:leadsMes.length, c:"#2563EB"},
-        {l:"Distribuídos", n:distMes.length, c:"#7C3AED"},
-        {l:"Em Negociação / Ativos", n:negMes.length, c:"#D97706"},
-        {l:"Fechados", n:fechMes.length, c:"#16A34A"},
-        {l:"Perdidos", n:perdMes.length, c:"#C41E3A"},
-        {l:"⚠️ Desperdiçados (< 3 contatos)", n:desperdicadosMes.length, c:"#991B1B"},
-      ].map(row=>`<div class="bar-row" style="margin-bottom:10px">
-        <div style="font-size:12px;color:#52525B;width:200px;flex-shrink:0">${row.l}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${leadsMes.length>0?Math.round((row.n/leadsMes.length)*100):0}%;background:${row.c}"></div></div>
-        <div style="font-size:12px;font-weight:700;color:${row.c};width:40px;text-align:right">${row.n}</div>
+    <!-- Por vendedor -->
+    <div class="card" style="padding:0;margin-bottom:14px">
+      <div style="padding:12px 14px 8px;border-bottom:1px solid #F4F4F5"><span class="sec-title">Por Vendedor — ${nomeMesSel}</span></div>
+      ${porVend.map((d,i,arr)=>`<div style="padding:12px 14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--red);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">${d.v.av}</div>
+          <div style="flex:1"><div style="font-weight:700">${d.v.nome}</div><div style="font-size:11px;color:#A1A1AA">${d.vf.length} venda(s) · ${d.vr>0?fmtM(d.vr):"R$ 0,00"}</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center">
+          <div style="background:#EFF6FF;padding:8px;border-radius:8px"><div style="font-size:18px;font-weight:700;color:#2563EB">${d.vc.length}</div><div style="font-size:10px;color:#1E40AF">captados</div></div>
+          <div style="background:#F0FDF4;padding:8px;border-radius:8px"><div style="font-size:18px;font-weight:700;color:#16A34A">${d.vf.length}</div><div style="font-size:10px;color:#166534">fechados</div></div>
+          <div style="background:#FFFBEB;padding:8px;border-radius:8px"><div style="font-size:18px;font-weight:700;color:#D97706">${d.vn.length}</div><div style="font-size:10px;color:#92400E">em aberto</div></div>
+          <div style="background:#FFF1F2;padding:8px;border-radius:8px"><div style="font-size:18px;font-weight:700;color:#C41E3A">${d.vp.length}</div><div style="font-size:10px;color:#9F1239">perdidos</div></div>
+        </div>
       </div>`).join("")}
     </div>
 
-    <!-- Por vendedor -->
-    <div class="card" style="padding:0">
-      <div style="padding:12px 14px 4px"><span class="sec-title">Por Vendedor — ${nomeMesA}</span></div>
-      ${analVend.map((d,i,arr)=>`<div style="padding:12px 14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"}">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <div style="width:28px;height:28px;border-radius:50%;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center">${d.v.av}</div>
-          <div style="font-weight:600">${d.v.nome}</div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center">
-          <div><div style="font-size:18px;font-weight:700;color:#2563EB">${d.vl.length}</div><div style="font-size:10px;color:#A1A1AA">recebidos</div></div>
-          <div><div style="font-size:18px;font-weight:700;color:#16A34A">${d.vf.length}</div><div style="font-size:10px;color:#A1A1AA">fechados</div></div>
-          <div><div style="font-size:18px;font-weight:700;color:#D97706">${d.vn.length}</div><div style="font-size:10px;color:#A1A1AA">em aberto</div></div>
-          <div><div style="font-size:18px;font-weight:700;color:#C41E3A">${d.vd.length}</div><div style="font-size:10px;color:#A1A1AA">desperdiç.</div></div>
-        </div>
-        ${d.vd.length>0?`<div style="margin-top:8px;font-size:11px;color:#C41E3A">⚠️ ${d.vd.length} lead(s) descartado(s) com menos de 3 contatos</div>`:""}
+    <!-- Fechamentos do mês (lista) -->
+    ${fechadosMes.length>0?`<div class="card" style="padding:0">
+      <div style="padding:12px 14px 8px;border-bottom:1px solid #F4F4F5"><span class="sec-title">Vendas Fechadas — ${nomeMesSel}</span></div>
+      ${fechadosMes.map((l,i,arr)=>{
+        const v=S.users.find(x=>x.id===l.vid);
+        const eOutroMes=new Date(l.entrada+"T12:00:00").getMonth()!==mesSel;
+        return`<div style="padding:10px 14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"};display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openLead(${l.id})">
+          <div style="flex:1"><div style="font-weight:600;font-size:13px">${l.nome}${eOutroMes?` <span style="font-size:10px;background:#ECFDF5;color:#059669;padding:1px 6px;border-radius:10px;font-weight:600">pipeline</span>`:""}</div>
+          <div style="font-size:11px;color:#A1A1AA">${v?.nome||""} · ${l.interesse} · ${fmtD(l.dataFechamento)}</div></div>
+          <div style="font-weight:700;color:#16A34A;font-size:13px">${fmtM(l.valorVenda)}</div>
+        </div>`;
+      }).join("")}
+    </div>`:""}`;
+  }
+
+  // ── JORNADA ──────────────────────────────────────────────────────────────────
+  if(tab==="jornada"){
+    const fech=leads.filter(l=>l.status==="Venda fechada"&&l.dataFechamento&&l.entrada);
+    const perd=leads.filter(l=>l.status==="Venda perdida");
+    const tempos=fech.map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
+    const tempoMedio=tempos.length?Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length):0;
+
+    // Onde os leads travam (etapa com mais perdas)
+    const etapasPerdas={};
+    perd.forEach(l=>{etapasPerdas[l.status]=(etapasPerdas[l.status]||0)+1;});
+    const etapasOrdenadas=Object.entries(etapasPerdas).sort((a,b)=>b[1]-a[1]);
+
+    // Leads sem contato há muito tempo
+    const semContato=leads.filter(l=>{
+      if(["Venda fechada","Venda perdida"].includes(l.status))return false;
+      if(!l.entrada)return false;
+      const dias=Math.round((Date.now()-new Date(l.entrada+"T12:00:00").getTime())/(1000*60*60*24));
+      return dias>7&&(l.tentativas||0)===0;
+    });
+
+    return tabsHtml+`
+    <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">
+      <div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Tempo Médio</div><div class="mv" style="color:#2563EB">${tempoMedio}d</div><div class="ms">entrada→fechamento</div></div>
+      <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Mais Rápido</div><div class="mv" style="color:#16A34A">${tempos.length?Math.min(...tempos):0}d</div></div>
+      <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Mais Longo</div><div class="mv" style="color:#C41E3A">${tempos.length?Math.max(...tempos):0}d</div></div>
+    </div>
+
+    ${semContato.length>0?`<div class="alert al-red" style="margin-bottom:14px">⚠️ <strong>${semContato.length} lead(s) sem nenhum contato há mais de 7 dias</strong></div>`:""}
+
+    <!-- Onde travam -->
+    ${etapasOrdenadas.length>0?`<div class="card" style="padding:16px;margin-bottom:14px">
+      <div class="sec-title">Onde os leads travam</div>
+      ${etapasOrdenadas.map(([etapa,n])=>`<div class="bar-row" style="margin-bottom:8px">
+        <div style="font-size:12px;color:#52525B;min-width:140px">${etapa}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.round((n/perd.length)*100)}%;background:#C41E3A"></div></div>
+        <div style="font-size:12px;font-weight:700;color:#C41E3A;width:30px;text-align:right">${n}</div>
       </div>`).join("")}
+    </div>`:""}
+
+    <!-- Jornada por lead fechado -->
+    <div class="card" style="padding:0">
+      <div style="padding:12px 14px 8px;border-bottom:1px solid #F4F4F5"><span class="sec-title">Tempo por Venda Fechada</span></div>
+      ${fech.length===0?`<div style="padding:24px;text-align:center;color:#A1A1AA">Nenhum fechamento registrado</div>`:
+      fech.map((l,i,arr)=>{
+        const e=new Date(l.entrada+"T12:00:00"),f=new Date(l.dataFechamento+"T12:00:00");
+        const dias=Math.round((f-e)/(1000*60*60*24));
+        const v=S.users.find(x=>x.id===l.vid);
+        const cor=dias<=7?"#16A34A":dias<=30?"#D97706":"#C41E3A";
+        return`<div style="padding:10px 14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"};display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openLead(${l.id})">
+          <div style="flex:1"><div style="font-weight:600;font-size:13px">${l.nome}</div>
+          <div style="font-size:11px;color:#A1A1AA">${v?.nome||""} · ${MESES_NOMES[e.getMonth()]} → ${MESES_NOMES[f.getMonth()]}</div></div>
+          <div style="text-align:right">
+            <div style="font-weight:700;color:${cor}">${dias}d</div>
+            <div style="font-size:11px;color:#16A34A">${fmtM(l.valorVenda)}</div>
+          </div>
+        </div>`;
+      }).join("")}
     </div>`;
   }
 
-  // VENDEDORES
-  return metricsTop+tabsHtml+`<div class="card">
-    <div style="padding:12px 14px 4px"><span class="sec-title">Desempenho por Vendedor</span></div>
+  // ── VENDEDORES ───────────────────────────────────────────────────────────────
+  if(tab==="vendedores"){
+    return tabsHtml+`<div class="card" style="padding:0">
+    <div style="padding:12px 14px 4px;border-bottom:1px solid #F4F4F5"><span class="sec-title">Desempenho Geral por Vendedor</span></div>
     ${vendedoresAtivos().map((v,i,arr)=>{
-      const ml=leads.filter(l=>l.vid===v.id), mf=ml.filter(l=>l.status==="Venda fechada");
+      const ml=leads.filter(l=>l.vid===v.id);
+      const mf=ml.filter(l=>l.status==="Venda fechada");
+      const mp=ml.filter(l=>l.status==="Venda perdida");
+      const mn=ml.filter(l=>["Em atendimento","Lead qualificado","Visita agendada","Orçamento enviado","Negociação"].includes(l.status));
       const vl=mf.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0);
-      const t=ml.length>0?((mf.length/ml.length)*100).toFixed(0):0;
+      const tk=mf.length?vl/mf.length:0;
+      const conv=ml.length>0?((mf.length/ml.length)*100).toFixed(0):0;
       const tmP=mf.filter(l=>l.entrada&&l.dataFechamento).map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
       const tmM=tmP.length?Math.round(tmP.reduce((a,b)=>a+b,0)/tmP.length):null;
-      const carga=calcCarga(v.id);
-      return`<div style="padding:12px 14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"}">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <div style="width:28px;height:28px;border-radius:50%;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${v.av}</div>
-          <div style="flex:1"><div style="font-weight:600;font-size:13px">${v.nome}</div>
-          <div style="font-size:11px;color:#A1A1AA">${ml.length} leads · ${mf.length} vendas · ${vl>0?fmtM(vl):"R$ 0,00"}${tmM?` · ⏱ ${tmM}d médio`:""} · carga: <span style="color:${cargaCor(carga)};font-weight:600">${cargaLabel(carga)}</span></div></div>
-          <span class="badge b-grn">${t}%</span>
+      return`<div style="padding:14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--red);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">${v.av}</div>
+          <div style="flex:1"><div style="font-weight:700;font-size:14px">${v.nome}</div>
+          <div style="font-size:11px;color:#A1A1AA">${ml.length} leads · ${conv}% conversão${tmM?` · ⏱ ${tmM}d médio`:""}</div></div>
+          <div style="text-align:right"><div style="font-weight:700;color:#16A34A;font-size:14px">${vl>0?fmtM(vl):"R$ 0,00"}</div>
+          <div style="font-size:11px;color:#A1A1AA">ticket: ${tk>0?fmtM(tk):"—"}</div></div>
         </div>
-        <div style="height:6px;background:#F0F0F0;border-radius:3px;overflow:hidden"><div style="height:100%;width:${t}%;background:#16A34A;border-radius:3px"></div></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;margin-bottom:8px">
+          <div><div style="font-size:16px;font-weight:700;color:#2563EB">${ml.length}</div><div style="font-size:10px;color:#A1A1AA">leads</div></div>
+          <div><div style="font-size:16px;font-weight:700;color:#16A34A">${mf.length}</div><div style="font-size:10px;color:#A1A1AA">fechados</div></div>
+          <div><div style="font-size:16px;font-weight:700;color:#D97706">${mn.length}</div><div style="font-size:10px;color:#A1A1AA">em aberto</div></div>
+          <div><div style="font-size:16px;font-weight:700;color:#C41E3A">${mp.length}</div><div style="font-size:10px;color:#A1A1AA">perdidos</div></div>
+        </div>
+        <div style="height:6px;background:#F0F0F0;border-radius:3px;overflow:hidden"><div style="height:100%;width:${conv}%;background:#16A34A;border-radius:3px"></div></div>
       </div>`;
     }).join("")}
-  </div>`;
+    </div>`;
+  }
+
+  // ── MÉTRICAS (só gestor e agência) ───────────────────────────────────────────
+  if(tab==="metricas"&&isAnalista){
+    const fech=leads.filter(l=>l.status==="Venda fechada"&&l.dataFechamento);
+    const perd=leads.filter(l=>l.status==="Venda perdida");
+    const ativos=leads.filter(l=>!["Venda fechada","Venda perdida"].includes(l.status)&&l.distribuidoPor!=null);
+    const naoDistrib=leads.filter(l=>!l.distribuidoPor);
+    const desperdicados=perd.filter(l=>(l.tentativas||0)<4);
+    const conv=leads.length>0?((fech.length/leads.length)*100).toFixed(1):0;
+    const convDist=leads.filter(l=>l.distribuidoPor).length>0?((fech.length/leads.filter(l=>l.distribuidoPor).length)*100).toFixed(1):0;
+
+    // Tempo médio entrada→fechamento
+    const tempos=fech.filter(l=>l.entrada).map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
+    const tempoMedio=tempos.length?Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length):0;
+
+    // Onde travam
+    const etapasPerdas={};
+    perd.forEach(l=>{etapasPerdas[l.status]=(etapasPerdas[l.status]||0)+1;});
+    const etapasOrdenadas=Object.entries(etapasPerdas).sort((a,b)=>b[1]-a[1]);
+
+    // Leads parados (sem contato há 7+ dias)
+    const parados=ativos.filter(l=>{
+      if(!l.entrada)return false;
+      const dias=Math.round((Date.now()-new Date(l.entrada+"T12:00:00").getTime())/(1000*60*60*24));
+      return dias>7&&(l.tentativas||0)===0;
+    });
+
+    return tabsHtml+`
+    <!-- Taxa de conversão -->
+    <div class="card" style="padding:16px;margin-bottom:14px">
+      <div class="sec-title">📊 Taxa de Conversão Real</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px">
+        <div style="background:#EFF6FF;padding:12px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#2563EB">${conv}%</div>
+          <div style="font-size:11px;color:#1E40AF">sobre total captado</div>
+        </div>
+        <div style="background:#F0FDF4;padding:12px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#16A34A">${convDist}%</div>
+          <div style="font-size:11px;color:#166534">sobre distribuídos</div>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        ${[
+          {l:"Total Captados",n:leads.length,c:"#2563EB"},
+          {l:"Distribuídos",n:leads.filter(l=>l.distribuidoPor).length,c:"#7C3AED"},
+          {l:"Em Negociação",n:ativos.length,c:"#D97706"},
+          {l:"Fechados",n:fech.length,c:"#16A34A"},
+          {l:"Perdidos",n:perd.length,c:"#C41E3A"},
+          {l:"⚠️ Desperdiçados (<4 contatos)",n:desperdicados.length,c:"#991B1B"},
+          {l:"Não distribuídos",n:naoDistrib.length,c:"#A1A1AA"},
+        ].map(row=>`<div class="bar-row" style="margin-bottom:8px">
+          <div style="font-size:12px;color:#52525B;min-width:180px">${row.l}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${leads.length>0?Math.round((row.n/leads.length)*100):0}%;background:${row.c}"></div></div>
+          <div style="font-size:12px;font-weight:700;color:${row.c};width:36px;text-align:right">${row.n}</div>
+        </div>`).join("")}
+      </div>
+    </div>
+
+    <!-- Tempo médio -->
+    <div class="card" style="padding:16px;margin-bottom:14px">
+      <div class="sec-title">⏱️ Tempo Médio de Fechamento</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px">
+        <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:#2563EB">${tempoMedio}d</div><div style="font-size:11px;color:#A1A1AA">média geral</div></div>
+        <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:#16A34A">${tempos.length?Math.min(...tempos):0}d</div><div style="font-size:11px;color:#A1A1AA">mais rápido</div></div>
+        <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:#C41E3A">${tempos.length?Math.max(...tempos):0}d</div><div style="font-size:11px;color:#A1A1AA">mais longo</div></div>
+      </div>
+      ${vendedoresAtivos().map(v=>{
+        const vf=fech.filter(l=>l.vid===v.id&&l.entrada);
+        const vt=vf.map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
+        const vm=vt.length?Math.round(vt.reduce((a,b)=>a+b,0)/vt.length):null;
+        if(!vm)return"";
+        return`<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #F4F4F5">
+          <div style="width:24px;height:24px;border-radius:50%;background:var(--red);color:#fff;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center">${v.av}</div>
+          <div style="flex:1;font-size:13px">${v.nome}</div>
+          <div style="font-weight:700;color:#2563EB">${vm}d médio</div>
+        </div>`;
+      }).join("")}
+    </div>
+
+    <!-- Onde travam -->
+    ${etapasOrdenadas.length>0?`<div class="card" style="padding:16px;margin-bottom:14px">
+      <div class="sec-title">🚧 Onde os Leads Travam</div>
+      <div style="margin-top:10px">
+        ${etapasOrdenadas.map(([etapa,n])=>`<div class="bar-row" style="margin-bottom:8px">
+          <div style="font-size:12px;color:#52525B;min-width:160px">${etapa}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${Math.round((n/perd.length)*100)}%;background:#C41E3A"></div></div>
+          <div style="font-size:12px;font-weight:700;color:#C41E3A;width:30px;text-align:right">${n}</div>
+        </div>`).join("")}
+      </div>
+    </div>`:""}
+
+    ${desperdicados.length>0?`<div class="alert al-red" style="margin-bottom:14px">⚠️ <strong>${desperdicados.length} lead(s) descartado(s) com menos de 4 contatos</strong> — oportunidades desperdiçadas sem esforço suficiente.</div>`:""}
+
+    ${parados.length>0?`<div class="alert al-amb" style="margin-bottom:14px">🕐 <strong>${parados.length} lead(s) sem contato há mais de 7 dias</strong> — precisam de atenção imediata.</div>`:""}`;
+  }
+
+  return tabsHtml+`<div style="text-align:center;padding:40px;color:#A1A1AA">Selecione uma aba</div>`;
 }
 
 // ─── VENDEDORES (CRUD COMPLETO) ───────────────────────────────────────────────
