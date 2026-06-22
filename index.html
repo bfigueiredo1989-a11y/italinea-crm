@@ -130,7 +130,6 @@ body{background:var(--bg);color:#18181B;font-size:14px;overflow:hidden;height:10
 <body>
 <div id="root"></div>
 <div id="toast" class="toast"></div>
-<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fecharModalNativo()"><div id="modal-box" style="background:#fff;border-radius:16px;width:100%;max-width:520px;max-height:90dvh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="height:8px"></div><div id="modal-hd" style="padding:14px 18px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #E4E4E7"><span id="modal-title" style="font-size:15px;font-weight:700"></span><button onclick="fecharModalNativo()" style="background:#F0F0F0;border:none;cursor:pointer;padding:4px 10px;border-radius:6px;font-size:13px">✕</button></div><div id="modal-body" style="padding:16px 18px"></div><div id="modal-footer" style="padding:12px 18px;border-top:1px solid #E4E4E7;display:flex;gap:8px"></div></div></div>
 <script>
 // ─── ESTADO GLOBAL ────────────────────────────────────────────────────────────
 const S = {
@@ -142,11 +141,10 @@ const S = {
     {id:4,role:"agencia", nome:"Bruno (Anthropic)",  email:"bruno@anthropic.com",   pass:"bruno2025", av:"BR",ativo:true},
   ],
   user:null, screen:"dash", leads:[], sel:null, modal:null, sideOpen:false,
-  detailTab:"info", relTab:"visaoMensal", relMes:5, relAno:2026, distribFiltro:"pendentes",
+  detailTab:"info", relTab:"mensal", distribFiltro:"pendentes",
   leadFiltro:{q:"",prio:"",status:""},
   showNotif:true,
   nextUserId:5,
-  metaMensal:0, // Meta da LOJA (total). Dividida automaticamente por nº de vendedores
   // Google Sheets
   sheetsUrl:"",
   sheetsMapeamento:{nome:"Nome",telefone:"Telefone",email:"Email",origem:"Origem",interesse:"Interesse",orc:"Orçamento",prazo:"Prazo"},
@@ -171,94 +169,6 @@ const KB_COLS    = [
   {s:"Venda fechada",      l:"✅ Fechado",     c:"#16A34A"},
   {s:"Venda perdida",      l:"❌ Perdido",     c:"#C41E3A"},
 ];
-
-// ─── PERSISTÊNCIA localStorage ───────────────────────────────────────────────
-const STORAGE_KEY = "italinea_crm_v1";
-
-function salvarDados() {
-  try {
-    const dados = {
-      leads: S.leads,
-      users: S.users,
-      nextUserId: S.nextUserId,
-      metaMensal: S.metaMensal,
-      sheetsFromDate: S.sheetsFromDate,
-      sheetsUrl: S.sheetsUrl,
-      sheetsMapeamento: S.sheetsMapeamento,
-      importLog: S.importLog,
-      lastImport: S.lastImport,
-      salvoEm: new Date().toISOString()
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(dados));
-  } catch(e) { console.warn("Erro ao salvar:", e); }
-}
-
-function carregarDados() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-    const dados = JSON.parse(raw);
-    if (dados.leads)           S.leads         = dados.leads.map(prep);
-    if (dados.users)           S.users         = dados.users;
-    if (dados.nextUserId)      S.nextUserId    = dados.nextUserId;
-    if (dados.metaMensal!=null) S.metaMensal   = dados.metaMensal;
-    if (dados.sheetsFromDate)   S.sheetsFromDate = dados.sheetsFromDate;
-    if (dados.sheetsUrl)       S.sheetsUrl     = dados.sheetsUrl;
-    if (dados.sheetsMapeamento) S.sheetsMapeamento = dados.sheetsMapeamento;
-    if (dados.importLog)       S.importLog     = dados.importLog;
-    if (dados.lastImport)      S.lastImport    = dados.lastImport;
-    return true;
-  } catch(e) { console.warn("Erro ao carregar:", e); return false; }
-}
-
-window.exportarBackup = function() {
-  const dados = {
-    versao: "italinea-crm-v1",
-    exportadoEm: new Date().toLocaleString("pt-BR"),
-    leads: S.leads,
-    users: S.users,
-    nextUserId: S.nextUserId,
-    sheetsUrl: S.sheetsUrl,
-    sheetsMapeamento: S.sheetsMapeamento,
-    importLog: S.importLog
-  };
-  const blob = new Blob([JSON.stringify(dados, null, 2)], {type: "application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const data = new Date().toLocaleDateString("pt-BR").replace(/\//g,"-");
-  a.href = url; a.download = `italinea-backup-${data}.json`; a.click();
-  URL.revokeObjectURL(url);
-  toast("✅ Backup exportado!", "grn");
-};
-
-window.importarBackup = function() {
-  const input = document.createElement("input");
-  input.type = "file"; input.accept = ".json";
-  input.onchange = function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-      try {
-        const dados = JSON.parse(ev.target.result);
-        if (!dados.versao || dados.versao !== "italinea-crm-v1")
-          return alert("Arquivo inválido. Use apenas backups exportados por este sistema.");
-        if (!confirm(`Restaurar backup de ${dados.exportadoEm}?\n\nIsso substituirá TODOS os dados atuais.`)) return;
-        if (dados.leads)           S.leads         = dados.leads.map(prep);
-        if (dados.users)           S.users         = dados.users;
-        if (dados.nextUserId)      S.nextUserId    = dados.nextUserId;
-        if (dados.sheetsUrl)       S.sheetsUrl     = dados.sheetsUrl;
-        if (dados.sheetsMapeamento) S.sheetsMapeamento = dados.sheetsMapeamento;
-        if (dados.importLog)       S.importLog     = dados.importLog;
-        salvarDados();
-        toast("✅ Backup restaurado com sucesso!", "grn");
-        render();
-      } catch(err) { alert("Erro ao ler o arquivo: " + err.message); }
-    };
-    reader.readAsText(file);
-  };
-  input.click();
-};
 
 const today = () => new Date().toISOString().split("T")[0];
 const fmtD  = d => d?new Date(d+"T12:00:00").toLocaleDateString("pt-BR"):"—";
@@ -350,22 +260,13 @@ function buildNotifBanner(){
     S.leads.filter(l=>l.follow&&l.follow<today()&&!["Venda fechada","Venda perdida"].includes(l.status))
       .slice(0,3).forEach(l=>items.push({cor:"#D97706",txt:`⚠️ Follow-up atrasado: ${l.nome}`,sub:`Vendedor: ${S.users.find(u=>u.id===l.vid)?.nome||"—"}`,id:l.id}));
   }
-  if(role==="gestor"||role==="agencia"||role==="distrib"){
-    // Aviso de importação diária
-    const ultimaImport=S.lastImport?new Date(S.lastImport):null;
-    const hoje=today();
-    const importouHoje=ultimaImport&&S.lastImport&&S.lastImport.includes(hoje.split("-").reverse().join("/"));
-    if(!importouHoje && (role==="gestor"||role==="distrib")){
-      items.push({cor:"#2563EB",txt:"📥 Importe os leads de hoje",sub:"Acesse Google Sheets → Importar Leads Agora",id:null,link:"sheets"});
-    }
+  if(role==="gestor"){
     const pend=S.leads.filter(l=>l.vid===null).length;
     const p1=S.leads.filter(l=>l.prio===1&&!["Venda fechada","Venda perdida"].includes(l.status)&&l.tentativas===0).length;
     const atr=S.leads.filter(l=>l.follow&&l.follow<today()&&!["Venda fechada","Venda perdida"].includes(l.status)).length;
-    const semResp=S.leads.filter(l=>l.status==="Sem resposta"&&l.follow&&l.follow<=today()&&!["Venda fechada","Venda perdida"].includes(l.status)).length;
-    if(role!=="agencia"&&pend>0)items.push({cor:"#7C3AED",txt:"📤 "+pend+" lead(s) aguardando distribuição",sub:"",id:null,link:"distribuicao"});
-    if(role==="gestor"&&p1>0)items.push({cor:"#C41E3A",txt:"🚨 "+p1+" lead(s) P1 sem nenhum contato ainda",sub:"Contato deve ser feito em até 1 hora",id:null,link:"leads"});
-    if(atr>0)items.push({cor:"#D97706",txt:"🔔 "+atr+" follow-up(s) atrasados na equipe",sub:"",id:null,link:"agenda"});
-    if(semResp>0)items.push({cor:"#EA580C",txt:"📵 "+semResp+" lead(s) sem resposta com follow-up vencido",sub:"Vendedores precisam fazer nova tentativa",id:null,link:"leads"});
+    if(pend>0)items.push({cor:"#7C3AED",txt:`📤 ${pend} lead(s) aguardando distribuição`,sub:"",id:null,link:"distribuicao"});
+    if(p1>0)  items.push({cor:"#C41E3A",txt:`🚨 ${p1} lead(s) P1 sem nenhum contato ainda`,sub:"Contato deve ser feito em até 1 hora",id:null,link:"leads"});
+    if(atr>0) items.push({cor:"#D97706",txt:`🔔 ${atr} follow-up(s) atrasados na equipe`,sub:"",id:null,link:"agenda"});
   }
 
   if(items.length===0)return"";
@@ -399,10 +300,10 @@ function buildApp(){
   const totalAlerts=role==="vendedor"?alertN:alertN+pend;
 
   let nav=[];
-  if(role==="gestor")     nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas do Dia",b:totalAlerts,bc:"amb"},{k:"leads",i:"👥",l:"Leads",b:newN},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"relatorios",i:"📈",l:"Relatórios"},{k:"vendedores",i:"👤",l:"Vendedores"},{k:"sheets",i:"🔗",l:"Google Sheets"},{k:"conta",i:"🔑",l:"Minha Conta"}];
+  if(role==="gestor")     nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas do Dia",b:totalAlerts,bc:"amb"},{k:"leads",i:"👥",l:"Leads",b:newN},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"kanban",i:"🗂",l:"Kanban"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"relatorios",i:"📈",l:"Relatórios"},{k:"vendedores",i:"👤",l:"Vendedores"},{k:"sheets",i:"🔗",l:"Google Sheets"}];
   else if(role==="distrib") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas",b:pend+alertN,bc:"pur"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"leads",i:"👥",l:"Leads"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
-  else if(role==="agencia") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"leads",i:"👥",l:"Leads"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"relatorios",i:"📈",l:"Relatórios"}];
-  else nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Meus Alertas",b:alertN,bc:"amb"},{k:"leads",i:"👥",l:"Meus Leads",b:newN},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
+  else if(role==="agencia") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"leads",i:"👥",l:"Leads"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"kanban",i:"🗂",l:"Kanban"},{k:"relatorios",i:"📈",l:"Relatórios"}];
+  else nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Meus Alertas",b:alertN,bc:"amb"},{k:"leads",i:"👥",l:"Meus Leads",b:newN},{k:"kanban",i:"🗂",l:"Kanban"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
 
   const TITLES={dash:"Dashboard",alertas:"Alertas do Dia",leads:"Leads",distribuicao:"Distribuição",kanban:"Kanban",agenda:"Agenda",relatorios:"Relatórios",vendedores:"Vendedores",sheets:"Google Sheets",conta:"Minha Conta"};
 
@@ -455,7 +356,7 @@ function buildApp(){
         <div class="bn-ico">${n.i}</div><div class="bn-lbl">${n.l}</div>
       </div>`).join("")}
     </div></div>
-  </div>`;
+  </div>${S.modal?buildModal():""}`;
 }
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
@@ -466,12 +367,17 @@ function buildLogin(){
       <div style="font-size:9px;color:#C41E3A;text-transform:uppercase;letter-spacing:3px;margin-top:2px">Lead Manager</div>
     </div>
     <div style="margin-bottom:12px"><label style="display:block;font-size:11px;color:rgba(255,255,255,.4);margin-bottom:4px">E-mail</label>
-    <input id="li-em" class="li" placeholder="seu@email.com.br" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <input id="li-em" class="li" value="fabio@italinea.com.br" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div style="margin-bottom:16px"><label style="display:block;font-size:11px;color:rgba(255,255,255,.4);margin-bottom:4px">Senha</label>
-    <input id="li-pw" type="password" class="li" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <input id="li-pw" type="password" class="li" value="fabio2025" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div id="li-err" style="display:none" class="alert al-red">❌ E-mail ou senha incorretos</div>
     <button class="btn btn-red btn-full" style="margin-top:8px" onclick="doLogin()">Entrar →</button>
-
+    <div style="height:1px;background:rgba(255,255,255,.08);margin:16px 0"></div>
+    <div style="font-size:10px;color:rgba(255,255,255,.25)">
+      ${S.users.filter(u=>u.ativo).map(u=>`<div style="margin-bottom:3px;display:flex;align-items:center;gap:5px">
+        <span class="role-tag ${u.role==="gestor"?"rt-g":u.role==="distrib"?"rt-d":u.role==="agencia"?"rt-a":"rt-v"}">${{gestor:"gerente",distrib:"distrib",vendedor:"vendedor",agencia:"agência"}[u.role]}</span>
+        ${u.email} / ${u.pass}</div>`).join("")}
+    </div>
   </div></div>`;
 }
 
@@ -564,117 +470,6 @@ function buildDash(ml){
     <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Vendas</div><div class="mv" style="color:#16A34A">${fech.length}</div></div>
     <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Valor Vendido</div><div class="mv" style="color:#16A34A;font-size:${val>=100000?14:17}px">${val>0?fmtM(val):"—"}</div></div>
     <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Conversão</div><div class="mv" style="color:#16A34A">${conv}%</div></div>
-  </div>`;
-
-  // ── BLOCO DE METAS ──────────────────────────────────────────────────────────
-  const mesAtual  = new Date().getMonth();
-  const anoAtual  = new Date().getFullYear();
-  const nomeMes   = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][mesAtual];
-  const metaLoja  = S.metaMensal || 0;           // meta total da loja
-  const numVends  = vendedoresAtivos().length || 1;
-  const metaVend  = metaLoja > 0 ? Math.round(metaLoja / numVends) : 0; // dividido igualmente
-
-  // Vendas do mês atual (toda a loja)
-  const vendasMes = S.leads.filter(l => {
-    if(l.status !== "Venda fechada" || !l.dataFechamento) return false;
-    const d = new Date(l.dataFechamento + "T12:00:00");
-    return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
-  });
-  const valorMes  = vendasMes.reduce((a,l) => a + (parseFloat(l.valorVenda)||0), 0);
-  const pctLoja   = metaLoja > 0 ? Math.min(Math.round((valorMes/metaLoja)*100),100) : 0;
-  const corLoja   = pctLoja >= 100 ? "#16A34A" : pctLoja >= 70 ? "#D97706" : "#C41E3A";
-
-  // Ticket médio das vendas do mês (ou geral se não houver no mês)
-  const todasFech = S.leads.filter(l => l.status==="Venda fechada" && l.valorVenda);
-  const ticketMedio = vendasMes.length > 0
-    ? valorMes / vendasMes.length
-    : todasFech.length > 0
-      ? todasFech.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0) / todasFech.length
-      : 0;
-
-  // Projeção: quantas vendas faltam para bater a meta da loja
-  const faltaLoja   = Math.max(metaLoja - valorMes, 0);
-  const vendasFalta = ticketMedio > 0 ? Math.ceil(faltaLoja / ticketMedio) : 0;
-
-  // Dados por vendedor
-  const dadosVend = vendedoresAtivos().map(v => {
-    const vMes = S.leads.filter(l => {
-      if(l.vid !== v.id || l.status !== "Venda fechada" || !l.dataFechamento) return false;
-      const d = new Date(l.dataFechamento + "T12:00:00");
-      return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
-    });
-    const vlMes  = vMes.reduce((a,l) => a+(parseFloat(l.valorVenda)||0), 0);
-    const pctV   = metaVend > 0 ? Math.min(Math.round((vlMes/metaVend)*100),100) : 0;
-    const corV   = pctV >= 100 ? "#16A34A" : pctV >= 70 ? "#D97706" : "#C41E3A";
-    const faltaV = Math.max(metaVend - vlMes, 0);
-    const vendasFaltaV = ticketMedio > 0 ? Math.ceil(faltaV / ticketMedio) : 0;
-    return {v, vMes, vlMes, pctV, corV, faltaV, vendasFaltaV};
-  });
-
-  h += `<div class="card" style="margin-bottom:14px;overflow:hidden">
-    <!-- Header da meta -->
-    <div style="background:linear-gradient(135deg,#111 0%,#1e1e1e 100%);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.4)">🎯 Metas — ${nomeMes}</div>
-        ${podeGerenciar() ? `<button onclick="abrirModalMeta()" style="margin-top:4px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.6);padding:3px 10px;border-radius:6px;font-size:11px;cursor:pointer">✏️ Definir meta</button>` : ""}
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:11px;color:rgba(255,255,255,.35)">Meta por vendedor</div>
-        <div style="font-size:18px;font-weight:700;font-family:Georgia,serif;color:#fff">${metaVend > 0 ? fmtM(metaVend) : "—"}</div>
-      </div>
-    </div>
-
-    <!-- META DA LOJA -->
-    <div style="padding:14px 16px;border-bottom:1px solid #F4F4F5">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
-        <div>
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#A1A1AA;margin-bottom:2px">🏪 Meta da Loja</div>
-          <div style="font-size:20px;font-weight:700;font-family:Georgia,serif;color:${corLoja}">${fmtM(valorMes)}</div>
-          <div style="font-size:11px;color:#A1A1AA">de ${metaLoja > 0 ? fmtM(metaLoja) : "Meta não definida"} · ${vendasMes.length} venda${vendasMes.length!==1?"s":""}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:32px;font-weight:700;color:${corLoja};line-height:1">${metaLoja > 0 ? pctLoja+"%" : "—"}</div>
-          ${metaLoja > 0 && pctLoja < 100 ? `<div style="font-size:11px;color:#A1A1AA">faltam ${fmtM(faltaLoja)}</div>` : ""}
-        </div>
-      </div>
-      <div style="height:10px;background:#F0F0F0;border-radius:5px;overflow:hidden;margin-bottom:6px">
-        <div style="height:100%;width:${pctLoja}%;background:${corLoja};border-radius:5px"></div>
-      </div>
-      ${pctLoja >= 100
-        ? `<div style="font-size:12px;font-weight:600;color:#16A34A">🎉 Meta da loja atingida! Incrível!</div>`
-        : metaLoja > 0 && ticketMedio > 0 && vendasFalta > 0
-          ? `<div style="font-size:12px;color:#52525B">💡 Ticket médio: <strong>${fmtM(ticketMedio)}</strong> · Faça mais <strong style="color:${corLoja}">${vendasFalta} venda${vendasFalta!==1?"s":""}</strong> para bater a meta</div>`
-          : metaLoja > 0 ? `<div style="font-size:12px;color:#A1A1AA">Defina vendas para ver a projeção</div>` : ""}
-    </div>
-
-    <!-- META POR VENDEDOR -->
-    <div style="padding:10px 16px 4px">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#A1A1AA;margin-bottom:10px">👤 Meta por Vendedor</div>
-    </div>
-    ${dadosVend.map((d,i) => `
-    <div style="padding:10px 16px;border-bottom:${i<dadosVend.length-1?"1px solid #F4F4F5":"none"}">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <div style="width:30px;height:30px;border-radius:50%;background:${d.corV};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${d.v.av}</div>
-        <div style="flex:1">
-          <div style="font-weight:600;font-size:13px">${d.v.nome}</div>
-          <div style="font-size:11px;color:#A1A1AA">${fmtM(d.vlMes)} de ${metaVend > 0 ? fmtM(metaVend) : "—"} · ${d.vMes.length} venda${d.vMes.length!==1?"s":""}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:20px;font-weight:700;color:${d.corV}">${metaVend > 0 ? d.pctV+"%" : "—"}</div>
-          ${metaVend > 0 && d.pctV < 100 ? `<div style="font-size:10px;color:#A1A1AA">faltam ${fmtM(d.faltaV)}</div>` : ""}
-        </div>
-      </div>
-      <div style="height:8px;background:#F0F0F0;border-radius:4px;overflow:hidden;margin-bottom:4px">
-        <div style="height:100%;width:${d.pctV}%;background:${d.corV};border-radius:4px"></div>
-      </div>
-      ${d.pctV >= 100
-        ? `<div style="font-size:11px;font-weight:600;color:#16A34A">🎉 Meta atingida!</div>`
-        : metaVend > 0 && ticketMedio > 0 && d.vendasFaltaV > 0
-          ? `<div style="font-size:11px;color:#52525B">💡 Faça mais <strong style="color:${d.corV}">${d.vendasFaltaV} venda${d.vendasFaltaV!==1?"s":""}</strong> com ticket médio de ${fmtM(ticketMedio)} para bater</div>`
-          : ""}
-    </div>`).join("")}
-
-    ${dadosVend.length === 0 ? `<div style="padding:16px;text-align:center;color:#A1A1AA;font-size:12px">Nenhum vendedor ativo</div>` : ""}
   </div>`;
 
   if(podeVerTudo()&&role!=="agencia"){
@@ -852,143 +647,23 @@ function buildKanban(ml){
 
 // ─── AGENDA ───────────────────────────────────────────────────────────────────
 function buildAgenda(ml){
-  const ativos=ml.filter(l=>!["Venda fechada","Venda perdida"].includes(l.status));
-  const atr=ativos.filter(l=>l.follow&&l.follow<today());
-  const hj=ativos.filter(l=>l.follow===today());
-  const sem=ativos.filter(l=>{if(!l.follow)return false;const d=(new Date(l.follow+"T12:00:00")-new Date())/86400000;return d>0&&d<=7;});
-
-  function etapaLabel(l){
-    const map={"Novo lead":"📥 Novo","Sem resposta":"📵 Sem resposta","Contato pendente":"📞 Aguardando","Em atendimento":"🔍 Qualificação","Lead qualificado":"🏠 Visita","Visita agendada":"📋 Orçamento","Orçamento enviado":"🤝 Negociação","Negociação":"🤝 Negociação"};
-    return map[l.status]||l.status;
+  const atr=ml.filter(l=>l.follow&&l.follow<today()&&!["Venda fechada","Venda perdida"].includes(l.status));
+  const hj=ml.filter(l=>l.follow===today()&&!["Venda fechada","Venda perdida"].includes(l.status));
+  const sem=ml.filter(l=>{if(!l.follow)return false;const d=(new Date(l.follow+"T12:00:00")-new Date())/86400000;return d>0&&d<=7;});
+  function sec(title,items,color){
+    return`<div style="margin-bottom:20px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:${color||"#A1A1AA"};margin-bottom:10px">${title} (${items.length})</div>
+    ${items.length===0?`<div style="text-align:center;padding:16px 0;color:#A1A1AA">Nenhum</div>`:
+    items.map(l=>{const v=S.users.find(x=>x.id===l.vid);return`<div class="card" style="padding:11px 13px;margin-bottom:8px;cursor:pointer;border-left:3px solid ${color||"#E4E4E7"}" onclick="openLead(${l.id})">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:600;font-size:13px">${l.nome}</span>${prioBdg(l.prio)}</div>
+      <div style="font-size:11px;color:#A1A1AA;margin-bottom:5px">${l.interesse} · ${v?.nome||""}${l.follow?` · 📅 ${fmtD(l.follow)}`:""}</div>${stsBdg(l.status)}
+    </div>`;}).join("")}</div>`;
   }
-
-  function cardAgenda(l, corBorda){
-    const v=S.users.find(x=>x.id===l.vid);
-    const atraso=l.follow&&l.follow<today();
-    const temp=l.temp||"Frio";
-    const tempCor=temp==="Quente"?"#C41E3A":temp==="Morno"?"#D97706":"#2563EB";
-    const tempIco=temp==="Quente"?"🔥":temp==="Morno"?"🌤":"❄️";
-    return `<div class="card" style="padding:14px;margin-bottom:10px;border-left:4px solid ${corBorda};cursor:pointer" onclick="openLead(${l.id})">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.nome}</div>
-          <div style="font-size:11px;color:#A1A1AA;margin-top:2px">${l.interesse} · ${l.orc}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
-          <span style="background:${tempCor}22;color:${tempCor};font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px">${tempIco} ${temp}</span>
-          ${prioBdg(l.prio)}
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-        <span style="background:#F0F0F0;color:#52525B;font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px">${etapaLabel(l)}</span>
-        ${v?`<span style="font-size:11px;color:#A1A1AA">👤 ${v.nome}</span>`:""}
-      </div>
-      ${l.followAssunto?`<div style="background:#FEF9C3;border-radius:8px;padding:8px 10px;margin-bottom:8px">
-        <div style="font-size:10px;font-weight:700;color:#92400E;text-transform:uppercase;margin-bottom:2px">📌 O que abordar</div>
-        <div style="font-size:12px;color:#78350F">${l.followAssunto}</div>
-      </div>`:""}
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <span style="font-size:12px;font-weight:600;color:${atraso?"#C41E3A":"#D97706"}">${atraso?"⚠️ Atrasado — ":"📅 "}${fmtD(l.follow)}</span>
-        <span style="font-size:11px;color:#A1A1AA">${l.tentativas} contato${l.tentativas!==1?"s":""}</span>
-      </div>
-    </div>`;
-  }
-
-  function sec(title,items,cor){
-    if(items.length===0)return"";
-    return`<div style="margin-bottom:20px">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:${cor};margin-bottom:10px">${title} (${items.length})</div>
-      ${items.map(l=>cardAgenda(l,cor)).join("")}
-    </div>`;
-  }
-
-  const total=atr.length+hj.length+sem.length;
-  return`<div>
-  <div class="metrics" style="margin-bottom:16px">
+  return`<div class="g3">
     <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Atrasados</div><div class="mv" style="color:#C41E3A">${atr.length}</div></div>
     <div class="mc"><div class="mc-bar" style="background:#D97706"></div><div class="ml">Hoje</div><div class="mv" style="color:#D97706">${hj.length}</div></div>
     <div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Esta Semana</div><div class="mv" style="color:#2563EB">${sem.length}</div></div>
   </div>
-  ${total===0?`<div style="text-align:center;padding:60px 20px;color:#A1A1AA">
-    <div style="font-size:48px;margin-bottom:12px">✅</div>
-    <div style="font-size:16px;font-weight:600;color:#18181B;margin-bottom:6px">Agenda limpa!</div>
-    <div style="font-size:13px">Nenhum follow-up pendente. Bom trabalho!</div>
-  </div>`:""}
-  ${sec("⚠️ Atrasados — contate agora!",atr,"#C41E3A")}
-  ${sec("📅 Hoje",hj,"#D97706")}
-  ${sec("📆 Esta Semana",sem,"#2563EB")}
-  </div>`;
-}
-
-
-
-// ─── OBSERVAÇÕES POR ETAPA DA JORNADA ────────────────────────────────────────
-window.abrirModalObsEtapa = function(key, nomeEtapa, leadId) {
-  const l = S.leads.find(x => x.id === leadId);
-  if(!l) return;
-  const obsAtual = l.obsEtapa?.[key] || "";
-  abrirModalNativo(
-    `📝 Observação — ${nomeEtapa}`,
-    `<div class="fg">
-       <label class="fl">O que aconteceu nesta etapa?</label>
-       <textarea class="fc" id="obs-etapa-txt" style="min-height:100px" placeholder="Ex: Cliente pediu desconto, ficou de dar retorno...">${obsAtual.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</textarea>
-     </div>`,
-    `<button onclick="fecharModalNativo()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#F0F0F0;cursor:pointer;font-size:13px">Cancelar</button>
-     <button onclick="salvarObsEtapa('${key}',${leadId})" style="flex:1;padding:10px;border-radius:8px;border:none;background:#C41E3A;color:#fff;cursor:pointer;font-size:13px;font-weight:600">💾 Salvar</button>`
-  );
-};
-
-window.salvarObsEtapa = function(key, leadId) {
-  const txt = document.getElementById('obs-etapa-txt');
-  if(!txt) return;
-  const l = S.leads.find(x => x.id === leadId);
-  if(!l) return;
-  const obsEtapa = {...(l.obsEtapa||{}), [key]: txt.value};
-  const upd = {...l, obsEtapa};
-  S.leads = S.leads.map(x => x.id === leadId ? upd : x);
-  if(S.sel?.id === leadId) S.sel = upd;
-  fecharModalNativo();
-  salvarDados();
-  toast("✅ Observação da etapa salva", "grn");
-  rerenderContent();
-};
-
-
-window.selResp = function(v) {
-  const inp = document.getElementById('m-respondeu');
-  const bs = document.getElementById('btn-sim');
-  const bn = document.getElementById('btn-nao');
-  if(!inp||!bs||!bn) return;
-  inp.value = v;
-  if(v==='sim'){
-    bs.style.background='#16A34A'; bs.style.color='#fff'; bs.style.borderColor='#16A34A';
-    bn.style.background='#fff'; bn.style.color='#333'; bn.style.borderColor='#E4E4E7';
-  } else {
-    bn.style.background='#FEE2E2'; bn.style.color='#C41E3A'; bn.style.borderColor='#C41E3A';
-    bs.style.background='#fff'; bs.style.color='#333'; bs.style.borderColor='#E4E4E7';
-  }
-};
-
-// ─── WHATSAPP COM MENSAGEM PRÉ-PREENCHIDA ─────────────────────────────────────
-function gerarLinkWhatsApp(l) {
-  const tel = "55" + l.tel.replace(/\D/g,"");
-  const vendedor = S.user?.nome || "da equipe";
-  const nomeCliente = l.nome.split(" ")[0]; // primeiro nome
-  const interesse = l.interesse || "móveis planejados";
-
-  // Adaptar interesse para português natural
-  const interAdj = interesse.toLowerCase().includes("casa")?"casa completa planejada":
-    interesse.toLowerCase().includes("cozinha")?"cozinha planejada":
-    interesse.toLowerCase().includes("dormit")||interesse.toLowerCase().includes("quarto")?"dormitório planejado":
-    interesse.toLowerCase().includes("banhe")?"banheiro planejado":
-    interesse+" planejado";
-
-  const msg = `Olá, ${nomeCliente}! 😊 Tudo bem?`
-    + `\n\nMeu nome é ${vendedor}, da *Italínea Novo Visual* 🏠`
-    + `\n\nVi que você demonstrou interesse em *${interAdj}*.`
-    + `\n\nPor favor me passe o que imagina do seu projeto para ajudarmos. 🛋️`;
-
-  return `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
+  ${sec("⚠️ Atrasados",atr,"#C41E3A")}${sec("📅 Hoje",hj,"#D97706")}${sec("📆 Esta Semana",sem,"#2563EB")}`;
 }
 
 // ─── DETALHE DO LEAD ─────────────────────────────────────────────────────────
@@ -1028,10 +703,10 @@ function buildDetalhe(l){
         ${l.dataFechamento?`<div><div style="font-size:10px;color:#A1A1AA;font-weight:600;text-transform:uppercase">Fechamento</div><div style="font-size:13px;font-weight:500;margin-top:1px;color:#16A34A">${fmtD(l.dataFechamento)}</div></div>`:""}
         ${l.motivo?`<div><div style="font-size:10px;color:#A1A1AA;font-weight:600;text-transform:uppercase">Motivo Perda</div><div style="font-size:13px;font-weight:500;margin-top:1px;color:#C41E3A">${l.motivo}</div></div>`:""}
       </div>
-      ${l.obs?`<div id="obs-display" style="margin-top:12px"><div style="font-size:10px;color:#A1A1AA;font-weight:600;text-transform:uppercase;margin-bottom:4px">Observações</div>
+      ${l.obs?`<div style="margin-top:12px"><div style="font-size:10px;color:#A1A1AA;font-weight:600;text-transform:uppercase;margin-bottom:4px">Observações</div>
         <div style="background:#F7F7F8;padding:9px 11px;border-radius:8px;font-size:13px">${l.obs}</div>
-        ${podEdit?`<button class="btn btn-blu" style="margin-top:8px;font-size:11px" onclick="abrirModalObs()">✏️ Editar</button>`:""}
-      </div>`:podEdit?`<div id="obs-display"><button class="btn" style="margin-top:12px;font-size:11px" onclick="abrirModalObs()">✏️ Adicionar observação</button></div>`:""}
+        ${podEdit?`<button class="btn btn-blu" style="margin-top:8px;font-size:11px" onclick="openModal('editObs')">✏️ Editar</button>`:""}
+      </div>`:podEdit?`<button class="btn" style="margin-top:12px;font-size:11px" onclick="openModal('editObs')">✏️ Adicionar observação</button>`:""}
     </div>
     <!-- Distribuição -->
     <div class="card" style="padding:14px;margin-bottom:12px;border-left:4px solid ${l.vid?"#16A34A":"#7C3AED"}">
@@ -1074,92 +749,40 @@ function buildDetalhe(l){
       ${h.obs?`<div style="font-size:12.5px;color:#A1A1AA;margin-top:3px">${h.obs}</div>`:""}
     </div>`).join("")}`;
   } else if(tab==="followup"){
-    const temContato = (l.tentativas||0) > 0 || (l.hist||[]).length > 0;
-    if(!temContato && podEdit){
-      tabContent=`<div style="text-align:center;padding:40px 20px;color:#A1A1AA">
-        <div style="font-size:42px;margin-bottom:12px">📞</div>
-        <div style="font-size:15px;font-weight:700;color:#18181B;margin-bottom:8px">Faça o primeiro contato</div>
-        <div style="font-size:13px;margin-bottom:20px">O follow-up fica disponível após o primeiro contato registrado com o cliente.</div>
-        <button class="btn btn-red" onclick="openModal('histo')">📋 Registrar 1º Contato</button>
-      </div>`;
-    } else {
-      tabContent=`
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span class="sec-title">Follow-up</span>
-        ${podEdit?`<button class="btn btn-red" style="font-size:11px;padding:6px 10px" onclick="openModal('follow')">+ Agendar</button>`:""}
-      </div>
-      ${l.follow?`<div class="card" style="padding:16px">
-          <div class="sec-title">Próximo Follow-up</div>
-          <div style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:${atr?"#C41E3A":"#18181B"};margin-bottom:8px">${fmtD(l.follow)}</div>
-          ${atr?`<span class="badge b-red" style="margin-bottom:14px;display:inline-flex">⚠️ Atrasado — ligue agora!</span>`:`<span class="badge b-grn" style="margin-bottom:14px;display:inline-flex">✅ Agendado</span>`}
-          ${podEdit?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid #F0F0F0"><button class="btn btn-red btn-full" onclick="openModal('follow')">📅 Reagendar</button></div>`:""}
-        </div>`
-      :`<div style="text-align:center;padding:32px;color:#A1A1AA">
-          <div style="font-size:36px">📅</div>
-          <div style="margin-top:8px;margin-bottom:16px">Nenhum follow-up agendado</div>
-          ${podEdit?`<button class="btn btn-pur" onclick="openModal('follow')">📅 Agendar Agora</button>`:""}
-        </div>`}`;
-    }
+    tabContent=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span class="sec-title">Follow-up</span>
+      ${podEdit?`<button class="btn btn-red" style="font-size:11px;padding:6px 10px" onclick="openModal('follow')">+ Agendar</button>`:""}
+    </div>
+    ${l.follow?`<div class="card" style="padding:16px">
+        <div class="sec-title">Próximo Follow-up</div>
+        <div style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:${atr?"#C41E3A":"#18181B"};margin-bottom:8px">${fmtD(l.follow)}</div>
+        ${atr?`<span class="badge b-red" style="margin-bottom:14px;display:inline-flex">⚠️ Atrasado — ligue agora!</span>`:`<span class="badge b-grn" style="margin-bottom:14px;display:inline-flex">✅ Agendado</span>`}
+        ${podEdit?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid #F0F0F0"><button class="btn btn-red btn-full" onclick="openModal('follow')">📅 Reagendar</button></div>`:""}
+      </div>`
+    :`<div style="text-align:center;padding:40px;color:#A1A1AA">
+        <div style="font-size:36px">📅</div>
+        <div style="margin-top:8px;margin-bottom:16px">Nenhum follow-up agendado</div>
+        ${podEdit?`<button class="btn btn-pur" onclick="openModal('follow')">📅 Agendar Agora</button>`:""}
+      </div>`}`;
   } else {
-    // Jornada com histórico por etapa
-    const etapas = [
-      {nome:"📥 Lead Captado",     cor:"#2563EB", done:true,
-       obs: l.obsEtapa?.captado||"", key:"captado"},
-      {nome:"📤 Distribuído",      cor:"#7C3AED", done:l.distribuidoPor!=null,
-       obs: l.obsEtapa?.distribuido||"", key:"distribuido"},
-      {nome:"📞 1º Contato",       cor:"#D97706", done:l.tentativas>0,
-       obs: l.obsEtapa?.contato||"", key:"contato"},
-      {nome:"🔍 Qualificação",     cor:"#F59E0B", done:["Lead qualificado","Visita agendada","Orçamento enviado","Negociação","Venda fechada"].includes(l.status),
-       obs: l.obsEtapa?.qualificacao||"", key:"qualificacao"},
-      {nome:"🏠 Visita",           cor:"#8B5CF6", done:l.visitou,
-       obs: l.obsEtapa?.visita||"", key:"visita"},
-      {nome:"📋 Orçamento",        cor:"#EA580C", done:["Orçamento enviado","Negociação","Venda fechada"].includes(l.status),
-       obs: l.obsEtapa?.orcamento||"", key:"orcamento"},
-      {nome:"🤝 Negociação",       cor:"#C41E3A", done:["Negociação","Venda fechada"].includes(l.status),
-       obs: l.obsEtapa?.negociacao||"", key:"negociacao"},
-      {nome:"✅ Fechamento",       cor:"#16A34A", done:l.status==="Venda fechada",
-       obs: l.obsEtapa?.fechamento||"", key:"fechamento"},
-    ];
-    const etapaAtual = etapas.filter(e=>e.done).length;
-    const pctJornada = Math.round((etapaAtual/etapas.length)*100);
-
-    tabContent=`<div>
-    <!-- Barra de progresso da jornada -->
-    <div class="card" style="padding:14px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:#A1A1AA">Progresso da Jornada ${diasInfo}</span>
-        <span style="font-size:12px;font-weight:700;color:#18181B">${etapaAtual}/${etapas.length} etapas</span>
-      </div>
-      <div style="height:8px;background:#F0F0F0;border-radius:4px;overflow:hidden;margin-bottom:10px">
-        <div style="height:100%;width:${pctJornada}%;background:linear-gradient(90deg,#2563EB,#16A34A);border-radius:4px"></div>
-      </div>
-      ${etapas.map((e,i)=>`
-      <div style="display:flex;gap:10px;margin-bottom:${i<etapas.length-1?10:0}px;align-items:flex-start">
-        <div style="flex-shrink:0;margin-top:2px">
-          <div style="width:22px;height:22px;border-radius:50%;background:${e.done?e.cor:"#E4E4E7"};display:flex;align-items:center;justify-content:center">
-            <span style="color:#fff;font-size:10px;font-weight:700">${e.done?"✓":i+1}</span>
-          </div>
-          ${i<etapas.length-1?`<div style="width:2px;height:10px;background:${e.done?"#E4E4E7":"#F0F0F0"};margin:2px auto"></div>`:""}
-        </div>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <span style="font-size:13px;font-weight:600;color:${e.done?"#18181B":"#A1A1AA"}">${e.nome}</span>
-            ${e.done&&podEdit?`<button onclick="abrirModalObsEtapa('${e.key}','${e.nome.replace(/'/g,"\'")}',${l.id})" style="background:none;border:1px solid #E4E4E7;border-radius:6px;padding:2px 8px;font-size:10px;cursor:pointer;color:#52525B;white-space:nowrap">${e.obs?"✏️":"+ obs"}</button>`:""}
-          </div>
-          ${e.obs?`<div style="font-size:11px;color:#52525B;background:#F7F7F8;padding:5px 8px;border-radius:6px;margin-top:4px">${e.obs}</div>`:""}
-          ${!e.done&&i===etapaAtual?`<div style="font-size:10px;color:${e.cor};font-weight:600;margin-top:2px">← Etapa atual</div>`:""}
-        </div>
+    tabContent=`<div class="card" style="padding:14px">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#A1A1AA;margin-bottom:14px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">Linha do Tempo ${diasInfo}</div>
+    <div class="tl">
+      ${JORNADA.map((j,i)=>`<div class="tl-item">
+        <div class="tl-dot ${jDone[i]?"done":""}"></div>
+        <div style="font-size:13px;font-weight:600;color:${jDone[i]?"#18181B":"#A1A1AA"}">${j}</div>
+        <div style="font-size:11px;color:#A1A1AA">${jDone[i]?"✓ Concluído":"Pendente"}</div>
       </div>`).join("")}
     </div>
-    ${podEdit?`<div class="card" style="padding:14px">
-      <div class="sec-title">Avançar Jornada</div>
+    ${podEdit?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr)">
+      <div class="sec-title">Atualizar jornada</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${!l.respondeu?`<button class="btn btn-blu" onclick="marcarRespondeu(${l.id})">✅ Respondeu</button>`:""}
         ${!l.visitou?`<button class="btn btn-blu" onclick="marcarVisitou(${l.id})">🏠 Fez visita</button>`:""}
-        ${!["Venda fechada","Venda perdida"].includes(l.status)?`<button class="btn btn-grn" onclick="openModal('fechado')">💰 Registrar Venda</button>`:""}
+        ${!["Venda fechada","Venda perdida"].includes(l.status)?`<button class="btn btn-grn" onclick="openModal('fechado')">💰 Marcar como venda</button>`:""}
       </div>
-    </div>`:""}
-    </div>`;
+    </div>`:""}</div>`;
   }
 
   return`<div>
@@ -1182,325 +805,115 @@ function buildDetalhe(l){
     <button class="btn" onclick="openModal('histo')">📋 Contato</button>
     <button class="btn" onclick="openModal('follow')">📅 Follow-up</button>
     <button class="btn" onclick="openModal('status')">🔄 Status</button>
-    <a href="${gerarLinkWhatsApp(l)}" target="_blank" class="btn" style="background:#25D366;color:#fff">📱 WhatsApp</a>
+    <a href="https://wa.me/55${l.tel.replace(/\D/g,"")}" target="_blank" class="btn" style="background:#25D366;color:#fff">📱 WA</a>
     <button class="btn btn-grn" onclick="openModal('fechado')">✅ Registrar Venda</button>
     <button class="btn btn-red" onclick="openModal('perdido')">❌ Perdido</button>
   </div>`:`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
-    <a href="${gerarLinkWhatsApp(l)}" target="_blank" class="btn" style="background:#25D366;color:#fff">📱 WhatsApp</a>
+    <a href="https://wa.me/55${l.tel.replace(/\D/g,"")}" target="_blank" class="btn" style="background:#25D366;color:#fff">📱 WhatsApp</a>
     <span class="badge b-gray" style="padding:8px 12px;font-size:12px">👁️ Somente visualização</span>
   </div>`}
   <div class="tabs">
-    ${[["info","Dados"],["jornada","Jornada"],["followup","Follow-up"],["historico","Histórico"]].map(([t,lbl])=>`<button class="tab ${tab===t?"active":""}" onclick="S.detailTab='${t}';rerenderContent()">${lbl}</button>`).join("")}
+    ${[["info","Dados"],["historico","Histórico"],["followup","Follow-up"],["jornada","Jornada"]].map(([t,lbl])=>`<button class="tab ${tab===t?"active":""}" onclick="S.detailTab='${t}';rerenderContent()">${lbl}</button>`).join("")}
   </div>${tabContent}</div>`;
 }
 
 // ─── RELATÓRIOS ───────────────────────────────────────────────────────────────
 function buildRelatorios(){
-  const leads=S.leads;
-  const isAnalista=["gestor","agencia"].includes(S.user?.role);
-  const tab=S.relTab||"visaoMensal";
-  const MESES_NOMES=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const leads=S.leads, fech=leads.filter(l=>l.status==="Venda fechada"&&l.dataFechamento);
+  const perd=leads.filter(l=>l.status==="Venda perdida");
+  const valTotal=fech.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0);
+  const ticket=fech.length?valTotal/fech.length:0;
+  const pct=(n,d)=>d>0?((n/d)*100).toFixed(0)+"%":"0%";
+  const tab=S.relTab||"mensal", ano=2025;
+  const porMes=MESES.map((_,mi)=>{
+    const lf=fech.filter(l=>{const d=new Date(l.dataFechamento+"T12:00:00");return d.getFullYear()===ano&&d.getMonth()===mi;});
+    const le=leads.filter(l=>{const d=new Date(l.entrada+"T12:00:00");return d.getFullYear()===ano&&d.getMonth()===mi;});
+    return{qtd:lf.length,val:lf.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0),ent:le.length};
+  });
+  const maxQ=Math.max(...porMes.map(m=>m.qtd),1), maxV=Math.max(...porMes.map(m=>m.val),1);
+  const acum=porMes.map((_,i)=>porMes.slice(0,i+1).reduce((a,m)=>a+m.val,0));
+  const maxAcum=Math.max(...acum,1);
+  const comJornada=fech.filter(l=>l.entrada&&l.dataFechamento);
+  const tempos=comJornada.map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
+  const tempoMedio=tempos.length?Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length):0;
 
-  // Seletor de mês/ano
-  const mesSel = S.relMes!==undefined ? S.relMes : new Date().getMonth();
-  const anoSel = S.relAno || 2026;
-  const nomeMesSel = MESES_NOMES[mesSel];
-
-  // Tabs
-  const tabsHtml=`<div class="tabs" style="overflow-x:auto;flex-wrap:nowrap;display:flex;gap:4px;margin-bottom:14px">
-    <button class="tab ${tab==="visaoMensal"?"active":""}" onclick="S.relTab='visaoMensal';rerenderContent()">📅 Visão Mensal</button>
-    <button class="tab ${tab==="jornada"?"active":""}" onclick="S.relTab='jornada';rerenderContent()">⏱️ Jornada</button>
-    <button class="tab ${tab==="vendedores"?"active":""}" onclick="S.relTab='vendedores';rerenderContent()">👥 Vendedores</button>
-    ${isAnalista?`<button class="tab ${tab==="metricas"?"active":""}" onclick="S.relTab='metricas';rerenderContent()">🔍 Métricas</button>`:""}
+  const tabsHtml=`<div class="tabs"><button class="tab ${tab==="mensal"?"active":""}" onclick="S.relTab='mensal';rerenderContent()">📅 Por Mês</button><button class="tab ${tab==="jornada"?"active":""}" onclick="S.relTab='jornada';rerenderContent()">🗺️ Jornada</button><button class="tab ${tab==="anual"?"active":""}" onclick="S.relTab='anual';rerenderContent()">📊 Acumulado</button><button class="tab ${tab==="vendedores"?"active":""}" onclick="S.relTab='vendedores';rerenderContent()">👥 Vendedores</button></div>`;
+  const metricsTop=`<div class="metrics">
+    <div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Total Leads</div><div class="mv" style="color:#2563EB">${leads.length}</div></div>
+    <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Fechadas</div><div class="mv" style="color:#16A34A">${fech.length}</div></div>
+    <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Perdidos</div><div class="mv" style="color:#C41E3A">${perd.length}</div></div>
+    <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Valor Total</div><div class="mv" style="color:#16A34A;font-size:15px">${valTotal>0?fmtM(valTotal):"—"}</div></div>
+    <div class="mc"><div class="mc-bar" style="background:#D97706"></div><div class="ml">Ticket Médio</div><div class="mv" style="color:#D97706;font-size:15px">${ticket>0?fmtM(ticket):"—"}</div></div>
+    <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Conversão</div><div class="mv" style="color:#16A34A">${pct(fech.length,leads.length)}</div></div>
   </div>`;
 
-  // Seletor de mês
-  const mesSelectorHtml=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-    <button onclick="if(S.relMes>0){S.relMes--;}else{S.relMes=11;S.relAno=(S.relAno||2026)-1;}rerenderContent()" style="background:#F0F0F0;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:16px">‹</button>
-    <div style="font-size:16px;font-weight:700;flex:1;text-align:center">${nomeMesSel} ${anoSel}</div>
-    <button onclick="if(S.relMes<11){S.relMes++;}else{S.relMes=0;S.relAno=(S.relAno||2026)+1;}rerenderContent()" style="background:#F0F0F0;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:16px">›</button>
-  </div>`;
-
-  // ── VISÃO MENSAL ─────────────────────────────────────────────────────────────
-  if(tab==="visaoMensal"){
-    // Leads captados no mês (por data de entrada)
-    const captadosMes = leads.filter(l=>{
-      const d=new Date(l.entrada+"T12:00:00");
-      return d.getMonth()===mesSel&&d.getFullYear()===anoSel;
-    });
-    // Fechamentos no mês (por data de fechamento - independente de quando entrou)
-    const fechadosMes = leads.filter(l=>{
-      if(l.status!=="Venda fechada"||!l.dataFechamento)return false;
-      const d=new Date(l.dataFechamento+"T12:00:00");
-      return d.getMonth()===mesSel&&d.getFullYear()===anoSel;
-    });
-    // Fechamentos de leads de meses anteriores que fecharam neste mês
-    const fechadosDeOutrosMeses = fechadosMes.filter(l=>{
-      const e=new Date(l.entrada+"T12:00:00");
-      return !(e.getMonth()===mesSel&&e.getFullYear()===anoSel);
-    });
-    const perdidosMes = leads.filter(l=>{
-      if(l.status!=="Venda perdida")return false;
-      const hist=l.hist||[];
-      if(hist.length===0)return false;
-      const ultimo=new Date(hist[hist.length-1].data+"T12:00:00");
-      return ultimo.getMonth()===mesSel&&ultimo.getFullYear()===anoSel;
-    });
-    const emNegociacaoMes = leads.filter(l=>
-      ["Em atendimento","Lead qualificado","Visita agendada","Orçamento enviado","Negociação"].includes(l.status)
-    );
-    const distribuídosMes = captadosMes.filter(l=>l.distribuidoPor!=null);
-    const receitaMes = fechadosMes.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0);
-    const ticketMes = fechadosMes.length>0?receitaMes/fechadosMes.length:0;
-    const convMes = captadosMes.length>0?((fechadosMes.length/captadosMes.length)*100).toFixed(0):0;
-
-    // Por vendedor no mês
-    const porVend = vendedoresAtivos().map(v=>{
-      const vc = captadosMes.filter(l=>l.vid===v.id);
-      const vf = fechadosMes.filter(l=>l.vid===v.id);
-      const vr = vf.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0);
-      const vn = emNegociacaoMes.filter(l=>l.vid===v.id);
-      const vp = perdidosMes.filter(l=>l.vid===v.id);
-      return{v,vc,vf,vr,vn,vp};
-    });
-
-    return tabsHtml+mesSelectorHtml+`
-    <!-- Cards resumo -->
-    <div class="metrics" style="grid-template-columns:repeat(3,1fr)">
-      <div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Captados</div><div class="mv" style="color:#2563EB">${captadosMes.length}</div><div class="ms">${distribuídosMes.length} distribuídos</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#D97706"></div><div class="ml">Em Negociação</div><div class="mv" style="color:#D97706">${emNegociacaoMes.length}</div><div class="ms">leads ativos</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Fechados</div><div class="mv" style="color:#16A34A">${fechadosMes.length}</div><div class="ms">${convMes}% conversão</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Perdidos</div><div class="mv" style="color:#C41E3A">${perdidosMes.length}</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Receita</div><div class="mv" style="color:#16A34A;font-size:14px">${receitaMes>0?fmtM(receitaMes):"—"}</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#D97706"></div><div class="ml">Ticket Médio</div><div class="mv" style="color:#D97706;font-size:14px">${ticketMes>0?fmtM(ticketMes):"—"}</div></div>
+  if(tab==="mensal")return metricsTop+tabsHtml+`
+    <div class="card" style="margin-bottom:14px;padding:16px">
+      <div class="sec-title">Fechamentos por mês — ${ano}</div>
+      <div class="month-chart">${porMes.slice(0,6).map((m,i)=>`<div class="month-bar-wrap"><div class="month-bar-cont"><div class="month-bar" style="background:${m.qtd>0?"#C41E3A":"#E4E4E7"};height:${Math.round((m.qtd/maxQ)*54)+4}px"></div></div><div class="month-label">${MESES[i]}</div><div class="month-val" style="color:${m.qtd>0?"#C41E3A":"#A1A1AA"}">${m.qtd||"—"}</div></div>`).join("")}</div>
+      <div style="height:1px;background:var(--bdr);margin:12px 0"></div>
+      <div class="month-chart">${porMes.slice(6).map((m,i)=>`<div class="month-bar-wrap"><div class="month-bar-cont"><div class="month-bar" style="background:${m.qtd>0?"#C41E3A":"#E4E4E7"};height:${Math.round((m.qtd/maxQ)*54)+4}px"></div></div><div class="month-label">${MESES[i+6]}</div><div class="month-val" style="color:${m.qtd>0?"#C41E3A":"#A1A1AA"}">${m.qtd||"—"}</div></div>`).join("")}</div>
     </div>
-
-    ${fechadosDeOutrosMeses.length>0?`<div class="alert al-grn" style="margin-bottom:14px">
-      ✨ <strong>${fechadosDeOutrosMeses.length} venda(s)</strong> fechadas este mês vieram de leads captados em meses anteriores — ${fmtM(fechadosDeOutrosMeses.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0))} em receita de pipeline anterior.
-    </div>`:""}
-
-    <!-- Por vendedor -->
-    <div class="card" style="padding:0;margin-bottom:14px">
-      <div style="padding:12px 14px 8px;border-bottom:1px solid #F4F4F5"><span class="sec-title">Por Vendedor — ${nomeMesSel}</span></div>
-      ${porVend.map((d,i,arr)=>`<div style="padding:12px 14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"}">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <div style="width:32px;height:32px;border-radius:50%;background:var(--red);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">${d.v.av}</div>
-          <div style="flex:1"><div style="font-weight:700">${d.v.nome}</div><div style="font-size:11px;color:#A1A1AA">${d.vf.length} venda(s) · ${d.vr>0?fmtM(d.vr):"R$ 0,00"}</div></div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center">
-          <div style="background:#EFF6FF;padding:8px;border-radius:8px"><div style="font-size:18px;font-weight:700;color:#2563EB">${d.vc.length}</div><div style="font-size:10px;color:#1E40AF">captados</div></div>
-          <div style="background:#F0FDF4;padding:8px;border-radius:8px"><div style="font-size:18px;font-weight:700;color:#16A34A">${d.vf.length}</div><div style="font-size:10px;color:#166534">fechados</div></div>
-          <div style="background:#FFFBEB;padding:8px;border-radius:8px"><div style="font-size:18px;font-weight:700;color:#D97706">${d.vn.length}</div><div style="font-size:10px;color:#92400E">em aberto</div></div>
-          <div style="background:#FFF1F2;padding:8px;border-radius:8px"><div style="font-size:18px;font-weight:700;color:#C41E3A">${d.vp.length}</div><div style="font-size:10px;color:#9F1239">perdidos</div></div>
-        </div>
-      </div>`).join("")}
-    </div>
-
-    <!-- Fechamentos do mês (lista) -->
-    ${fechadosMes.length>0?`<div class="card" style="padding:0">
-      <div style="padding:12px 14px 8px;border-bottom:1px solid #F4F4F5"><span class="sec-title">Vendas Fechadas — ${nomeMesSel}</span></div>
-      ${fechadosMes.map((l,i,arr)=>{
-        const v=S.users.find(x=>x.id===l.vid);
-        const eOutroMes=new Date(l.entrada+"T12:00:00").getMonth()!==mesSel;
-        return`<div style="padding:10px 14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"};display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openLead(${l.id})">
-          <div style="flex:1"><div style="font-weight:600;font-size:13px">${l.nome}${eOutroMes?` <span style="font-size:10px;background:#ECFDF5;color:#059669;padding:1px 6px;border-radius:10px;font-weight:600">pipeline</span>`:""}</div>
-          <div style="font-size:11px;color:#A1A1AA">${v?.nome||""} · ${l.interesse} · ${fmtD(l.dataFechamento)}</div></div>
-          <div style="font-weight:700;color:#16A34A;font-size:13px">${fmtM(l.valorVenda)}</div>
-        </div>`;
-      }).join("")}
-    </div>`:""}`;
-  }
-
-  // ── JORNADA ──────────────────────────────────────────────────────────────────
-  if(tab==="jornada"){
-    const fech=leads.filter(l=>l.status==="Venda fechada"&&l.dataFechamento&&l.entrada);
-    const perd=leads.filter(l=>l.status==="Venda perdida");
-    const tempos=fech.map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
-    const tempoMedio=tempos.length?Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length):0;
-
-    // Onde os leads travam (etapa com mais perdas)
-    const etapasPerdas={};
-    perd.forEach(l=>{etapasPerdas[l.status]=(etapasPerdas[l.status]||0)+1;});
-    const etapasOrdenadas=Object.entries(etapasPerdas).sort((a,b)=>b[1]-a[1]);
-
-    // Leads sem contato há muito tempo
-    const semContato=leads.filter(l=>{
-      if(["Venda fechada","Venda perdida"].includes(l.status))return false;
-      if(!l.entrada)return false;
-      const dias=Math.round((Date.now()-new Date(l.entrada+"T12:00:00").getTime())/(1000*60*60*24));
-      return dias>7&&(l.tentativas||0)===0;
-    });
-
-    return tabsHtml+`
-    <div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">
-      <div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Tempo Médio</div><div class="mv" style="color:#2563EB">${tempoMedio}d</div><div class="ms">entrada→fechamento</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Mais Rápido</div><div class="mv" style="color:#16A34A">${tempos.length?Math.min(...tempos):0}d</div></div>
-      <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Mais Longo</div><div class="mv" style="color:#C41E3A">${tempos.length?Math.max(...tempos):0}d</div></div>
-    </div>
-
-    ${semContato.length>0?`<div class="alert al-red" style="margin-bottom:14px">⚠️ <strong>${semContato.length} lead(s) sem nenhum contato há mais de 7 dias</strong></div>`:""}
-
-    <!-- Onde travam -->
-    ${etapasOrdenadas.length>0?`<div class="card" style="padding:16px;margin-bottom:14px">
-      <div class="sec-title">Onde os leads travam</div>
-      ${etapasOrdenadas.map(([etapa,n])=>`<div class="bar-row" style="margin-bottom:8px">
-        <div style="font-size:12px;color:#52525B;min-width:140px">${etapa}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${Math.round((n/perd.length)*100)}%;background:#C41E3A"></div></div>
-        <div style="font-size:12px;font-weight:700;color:#C41E3A;width:30px;text-align:right">${n}</div>
-      </div>`).join("")}
-    </div>`:""}
-
-    <!-- Jornada por lead fechado -->
-    <div class="card" style="padding:0">
-      <div style="padding:12px 14px 8px;border-bottom:1px solid #F4F4F5"><span class="sec-title">Tempo por Venda Fechada</span></div>
-      ${fech.length===0?`<div style="padding:24px;text-align:center;color:#A1A1AA">Nenhum fechamento registrado</div>`:
-      fech.map((l,i,arr)=>{
-        const e=new Date(l.entrada+"T12:00:00"),f=new Date(l.dataFechamento+"T12:00:00");
-        const dias=Math.round((f-e)/(1000*60*60*24));
-        const v=S.users.find(x=>x.id===l.vid);
-        const cor=dias<=7?"#16A34A":dias<=30?"#D97706":"#C41E3A";
-        return`<div style="padding:10px 14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"};display:flex;align-items:center;gap:10px;cursor:pointer" onclick="openLead(${l.id})">
-          <div style="flex:1"><div style="font-weight:600;font-size:13px">${l.nome}</div>
-          <div style="font-size:11px;color:#A1A1AA">${v?.nome||""} · ${MESES_NOMES[e.getMonth()]} → ${MESES_NOMES[f.getMonth()]}</div></div>
-          <div style="text-align:right">
-            <div style="font-weight:700;color:${cor}">${dias}d</div>
-            <div style="font-size:11px;color:#16A34A">${fmtM(l.valorVenda)}</div>
-          </div>
-        </div>`;
-      }).join("")}
+    <div class="card" style="padding:16px">
+      <div class="sec-title">Entradas vs Fechamentos — ${ano}</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:360px">
+        <thead><tr style="background:#F7F7F8"><th style="padding:8px;text-align:left;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Mês</th><th style="padding:8px;text-align:center;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Entradas</th><th style="padding:8px;text-align:center;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Fechamentos</th><th style="padding:8px;text-align:right;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Valor</th></tr></thead>
+        <tbody>${MESES.map((m,i)=>{const d=porMes[i];return`<tr style="border-bottom:1px solid #F4F4F5"><td style="padding:8px;font-weight:500">${MESES_FULL[i]}</td><td style="padding:8px;text-align:center;color:#2563EB;font-weight:${d.ent>0?600:400}">${d.ent||"—"}</td><td style="padding:8px;text-align:center;color:#16A34A;font-weight:${d.qtd>0?700:400}">${d.qtd||"—"}</td><td style="padding:8px;text-align:right;color:#16A34A;font-weight:${d.val>0?600:400}">${d.val>0?fmtM(d.val):"—"}</td></tr>`;}).join("")}</tbody>
+      </table></div>
     </div>`;
-  }
 
-  // ── VENDEDORES ───────────────────────────────────────────────────────────────
-  if(tab==="vendedores"){
-    return tabsHtml+`<div class="card" style="padding:0">
-    <div style="padding:12px 14px 4px;border-bottom:1px solid #F4F4F5"><span class="sec-title">Desempenho Geral por Vendedor</span></div>
+  if(tab==="jornada")return metricsTop+tabsHtml+`
+    <div class="g3"><div class="mc"><div class="mc-bar" style="background:#2563EB"></div><div class="ml">Tempo Médio</div><div class="mv" style="color:#2563EB">${tempoMedio}d</div><div class="ms">entrada→fechamento</div></div>
+    <div class="mc"><div class="mc-bar" style="background:#16A34A"></div><div class="ml">Mais Rápido</div><div class="mv" style="color:#16A34A">${tempos.length?Math.min(...tempos):0}d</div></div>
+    <div class="mc"><div class="mc-bar" style="background:#C41E3A"></div><div class="ml">Mais Longo</div><div class="mv" style="color:#C41E3A">${tempos.length?Math.max(...tempos):0}d</div></div></div>
+    <div class="card" style="padding:16px">
+      <div class="sec-title">Jornada por cliente</div>
+      ${comJornada.map(l=>{const e=new Date(l.entrada+"T12:00:00"),f=new Date(l.dataFechamento+"T12:00:00"),dias=Math.round((f-e)/(1000*60*60*24)),v=S.users.find(x=>x.id===l.vid);return`<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #F4F4F5;flex-wrap:wrap">
+        <div style="flex:1;min-width:100px"><div style="font-weight:600;font-size:13px">${l.nome}</div><div style="font-size:11px;color:#A1A1AA">${v?.nome||""} · ${l.interesse}</div></div>
+        <div style="text-align:center;min-width:44px"><div style="font-size:10px;color:#A1A1AA">Entrada</div><div style="font-size:12px;font-weight:600">${MESES[e.getMonth()]}</div></div>
+        <div style="color:#A1A1AA">→</div>
+        <div style="text-align:center;min-width:50px"><div style="font-size:10px;color:#A1A1AA">Fechou</div><div style="font-size:12px;font-weight:600;color:#16A34A">${MESES[f.getMonth()]}</div></div>
+        <span class="badge b-blu" style="min-width:46px;justify-content:center">${dias}d</span>
+        <div style="font-weight:700;font-size:12px;color:#16A34A;min-width:76px;text-align:right">${fmtM(l.valorVenda)}</div>
+      </div>`;}).join("")||`<div style="text-align:center;padding:24px;color:#A1A1AA">Nenhum fechamento registrado</div>`}
+    </div>`;
+
+  if(tab==="anual")return metricsTop+tabsHtml+`
+    <div class="card" style="padding:16px;margin-bottom:14px">
+      <div class="sec-title">Acumulado ${ano}</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:320px">
+        <thead><tr style="background:#F7F7F8"><th style="padding:8px;text-align:left;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Mês</th><th style="padding:8px;text-align:center;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Vendas</th><th style="padding:8px;text-align:right;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Mês</th><th style="padding:8px;text-align:right;font-size:10px;color:#A1A1AA;text-transform:uppercase;font-weight:700">Acumulado</th></tr></thead>
+        <tbody>${MESES.map((m,i)=>{const d=porMes[i],ac=acum[i];return`<tr style="border-bottom:1px solid #F4F4F5"><td style="padding:8px;font-weight:500">${MESES_FULL[i]}</td><td style="padding:8px;text-align:center;color:#16A34A;font-weight:${d.qtd>0?700:400}">${d.qtd||"—"}</td><td style="padding:8px;text-align:right;color:#16A34A;font-weight:${d.val>0?600:400}">${d.val>0?fmtM(d.val):"—"}</td><td style="padding:8px;text-align:right;font-weight:700;color:${ac>0?"#2563EB":"#A1A1AA"}">${ac>0?fmtM(ac):"—"}</td></tr>`;}).join("")}
+        <tr style="background:#F7F7F8;border-top:2px solid var(--bdr)"><td style="padding:8px;font-weight:700">TOTAL ANUAL</td><td style="padding:8px;text-align:center;font-weight:700;color:#16A34A">${fech.length}</td><td style="padding:8px;text-align:right;font-weight:700;color:#16A34A">${fmtM(valTotal)}</td><td style="padding:8px;text-align:right;font-weight:700;color:#2563EB">${fmtM(valTotal)}</td></tr>
+        </tbody></table></div>
+    </div>
+    <div class="card" style="padding:16px"><div class="sec-title">Evolução acumulada</div>
+      ${acum.filter(v=>v>0).length===0?`<div style="text-align:center;padding:16px;color:#A1A1AA">Sem dados</div>`:
+      acum.map((ac,i)=>ac>0?`<div class="bar-row"><div style="font-size:11px;color:#52525B;flex-shrink:0;text-align:right;width:35px">${MESES[i]}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round((ac/maxAcum)*100)}%;background:#2563EB"></div></div><div style="font-size:11px;font-weight:600;color:#2563EB;width:80px">${fmtM(ac)}</div></div>`:""
+      ).join("")}
+    </div>`;
+
+  // VENDEDORES
+  return metricsTop+tabsHtml+`<div class="card">
+    <div style="padding:12px 14px 4px"><span class="sec-title">Desempenho por Vendedor</span></div>
     ${vendedoresAtivos().map((v,i,arr)=>{
-      const ml=leads.filter(l=>l.vid===v.id);
-      const mf=ml.filter(l=>l.status==="Venda fechada");
-      const mp=ml.filter(l=>l.status==="Venda perdida");
-      const mn=ml.filter(l=>["Em atendimento","Lead qualificado","Visita agendada","Orçamento enviado","Negociação"].includes(l.status));
+      const ml=leads.filter(l=>l.vid===v.id), mf=ml.filter(l=>l.status==="Venda fechada");
       const vl=mf.reduce((a,l)=>a+(parseFloat(l.valorVenda)||0),0);
-      const tk=mf.length?vl/mf.length:0;
-      const conv=ml.length>0?((mf.length/ml.length)*100).toFixed(0):0;
+      const t=ml.length>0?((mf.length/ml.length)*100).toFixed(0):0;
       const tmP=mf.filter(l=>l.entrada&&l.dataFechamento).map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
       const tmM=tmP.length?Math.round(tmP.reduce((a,b)=>a+b,0)/tmP.length):null;
-      return`<div style="padding:14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"}">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-          <div style="width:36px;height:36px;border-radius:50%;background:var(--red);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">${v.av}</div>
-          <div style="flex:1"><div style="font-weight:700;font-size:14px">${v.nome}</div>
-          <div style="font-size:11px;color:#A1A1AA">${ml.length} leads · ${conv}% conversão${tmM?` · ⏱ ${tmM}d médio`:""}</div></div>
-          <div style="text-align:right"><div style="font-weight:700;color:#16A34A;font-size:14px">${vl>0?fmtM(vl):"R$ 0,00"}</div>
-          <div style="font-size:11px;color:#A1A1AA">ticket: ${tk>0?fmtM(tk):"—"}</div></div>
+      const carga=calcCarga(v.id);
+      return`<div style="padding:12px 14px;border-bottom:${i<arr.length-1?"1px solid #F4F4F5":"none"}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${v.av}</div>
+          <div style="flex:1"><div style="font-weight:600;font-size:13px">${v.nome}</div>
+          <div style="font-size:11px;color:#A1A1AA">${ml.length} leads · ${mf.length} vendas · ${vl>0?fmtM(vl):"R$ 0,00"}${tmM?` · ⏱ ${tmM}d médio`:""} · carga: <span style="color:${cargaCor(carga)};font-weight:600">${cargaLabel(carga)}</span></div></div>
+          <span class="badge b-grn">${t}%</span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;margin-bottom:8px">
-          <div><div style="font-size:16px;font-weight:700;color:#2563EB">${ml.length}</div><div style="font-size:10px;color:#A1A1AA">leads</div></div>
-          <div><div style="font-size:16px;font-weight:700;color:#16A34A">${mf.length}</div><div style="font-size:10px;color:#A1A1AA">fechados</div></div>
-          <div><div style="font-size:16px;font-weight:700;color:#D97706">${mn.length}</div><div style="font-size:10px;color:#A1A1AA">em aberto</div></div>
-          <div><div style="font-size:16px;font-weight:700;color:#C41E3A">${mp.length}</div><div style="font-size:10px;color:#A1A1AA">perdidos</div></div>
-        </div>
-        <div style="height:6px;background:#F0F0F0;border-radius:3px;overflow:hidden"><div style="height:100%;width:${conv}%;background:#16A34A;border-radius:3px"></div></div>
+        <div style="height:6px;background:#F0F0F0;border-radius:3px;overflow:hidden"><div style="height:100%;width:${t}%;background:#16A34A;border-radius:3px"></div></div>
       </div>`;
     }).join("")}
-    </div>`;
-  }
-
-  // ── MÉTRICAS (só gestor e agência) ───────────────────────────────────────────
-  if(tab==="metricas"&&isAnalista){
-    const fech=leads.filter(l=>l.status==="Venda fechada"&&l.dataFechamento);
-    const perd=leads.filter(l=>l.status==="Venda perdida");
-    const ativos=leads.filter(l=>!["Venda fechada","Venda perdida"].includes(l.status)&&l.distribuidoPor!=null);
-    const naoDistrib=leads.filter(l=>!l.distribuidoPor);
-    const desperdicados=perd.filter(l=>(l.tentativas||0)<4);
-    const conv=leads.length>0?((fech.length/leads.length)*100).toFixed(1):0;
-    const convDist=leads.filter(l=>l.distribuidoPor).length>0?((fech.length/leads.filter(l=>l.distribuidoPor).length)*100).toFixed(1):0;
-
-    // Tempo médio entrada→fechamento
-    const tempos=fech.filter(l=>l.entrada).map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
-    const tempoMedio=tempos.length?Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length):0;
-
-    // Onde travam
-    const etapasPerdas={};
-    perd.forEach(l=>{etapasPerdas[l.status]=(etapasPerdas[l.status]||0)+1;});
-    const etapasOrdenadas=Object.entries(etapasPerdas).sort((a,b)=>b[1]-a[1]);
-
-    // Leads parados (sem contato há 7+ dias)
-    const parados=ativos.filter(l=>{
-      if(!l.entrada)return false;
-      const dias=Math.round((Date.now()-new Date(l.entrada+"T12:00:00").getTime())/(1000*60*60*24));
-      return dias>7&&(l.tentativas||0)===0;
-    });
-
-    return tabsHtml+`
-    <!-- Taxa de conversão -->
-    <div class="card" style="padding:16px;margin-bottom:14px">
-      <div class="sec-title">📊 Taxa de Conversão Real</div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px">
-        <div style="background:#EFF6FF;padding:12px;border-radius:10px;text-align:center">
-          <div style="font-size:28px;font-weight:700;color:#2563EB">${conv}%</div>
-          <div style="font-size:11px;color:#1E40AF">sobre total captado</div>
-        </div>
-        <div style="background:#F0FDF4;padding:12px;border-radius:10px;text-align:center">
-          <div style="font-size:28px;font-weight:700;color:#16A34A">${convDist}%</div>
-          <div style="font-size:11px;color:#166534">sobre distribuídos</div>
-        </div>
-      </div>
-      <div style="margin-top:12px">
-        ${[
-          {l:"Total Captados",n:leads.length,c:"#2563EB"},
-          {l:"Distribuídos",n:leads.filter(l=>l.distribuidoPor).length,c:"#7C3AED"},
-          {l:"Em Negociação",n:ativos.length,c:"#D97706"},
-          {l:"Fechados",n:fech.length,c:"#16A34A"},
-          {l:"Perdidos",n:perd.length,c:"#C41E3A"},
-          {l:"⚠️ Desperdiçados (<4 contatos)",n:desperdicados.length,c:"#991B1B"},
-          {l:"Não distribuídos",n:naoDistrib.length,c:"#A1A1AA"},
-        ].map(row=>`<div class="bar-row" style="margin-bottom:8px">
-          <div style="font-size:12px;color:#52525B;min-width:180px">${row.l}</div>
-          <div class="bar-track"><div class="bar-fill" style="width:${leads.length>0?Math.round((row.n/leads.length)*100):0}%;background:${row.c}"></div></div>
-          <div style="font-size:12px;font-weight:700;color:${row.c};width:36px;text-align:right">${row.n}</div>
-        </div>`).join("")}
-      </div>
-    </div>
-
-    <!-- Tempo médio -->
-    <div class="card" style="padding:16px;margin-bottom:14px">
-      <div class="sec-title">⏱️ Tempo Médio de Fechamento</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px">
-        <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:#2563EB">${tempoMedio}d</div><div style="font-size:11px;color:#A1A1AA">média geral</div></div>
-        <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:#16A34A">${tempos.length?Math.min(...tempos):0}d</div><div style="font-size:11px;color:#A1A1AA">mais rápido</div></div>
-        <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:#C41E3A">${tempos.length?Math.max(...tempos):0}d</div><div style="font-size:11px;color:#A1A1AA">mais longo</div></div>
-      </div>
-      ${vendedoresAtivos().map(v=>{
-        const vf=fech.filter(l=>l.vid===v.id&&l.entrada);
-        const vt=vf.map(l=>Math.round((new Date(l.dataFechamento+"T12:00:00")-new Date(l.entrada+"T12:00:00"))/(1000*60*60*24)));
-        const vm=vt.length?Math.round(vt.reduce((a,b)=>a+b,0)/vt.length):null;
-        if(!vm)return"";
-        return`<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #F4F4F5">
-          <div style="width:24px;height:24px;border-radius:50%;background:var(--red);color:#fff;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center">${v.av}</div>
-          <div style="flex:1;font-size:13px">${v.nome}</div>
-          <div style="font-weight:700;color:#2563EB">${vm}d médio</div>
-        </div>`;
-      }).join("")}
-    </div>
-
-    <!-- Onde travam -->
-    ${etapasOrdenadas.length>0?`<div class="card" style="padding:16px;margin-bottom:14px">
-      <div class="sec-title">🚧 Onde os Leads Travam</div>
-      <div style="margin-top:10px">
-        ${etapasOrdenadas.map(([etapa,n])=>`<div class="bar-row" style="margin-bottom:8px">
-          <div style="font-size:12px;color:#52525B;min-width:160px">${etapa}</div>
-          <div class="bar-track"><div class="bar-fill" style="width:${Math.round((n/perd.length)*100)}%;background:#C41E3A"></div></div>
-          <div style="font-size:12px;font-weight:700;color:#C41E3A;width:30px;text-align:right">${n}</div>
-        </div>`).join("")}
-      </div>
-    </div>`:""}
-
-    ${desperdicados.length>0?`<div class="alert al-red" style="margin-bottom:14px">⚠️ <strong>${desperdicados.length} lead(s) descartado(s) com menos de 4 contatos</strong> — oportunidades desperdiçadas sem esforço suficiente.</div>`:""}
-
-    ${parados.length>0?`<div class="alert al-amb" style="margin-bottom:14px">🕐 <strong>${parados.length} lead(s) sem contato há mais de 7 dias</strong> — precisam de atenção imediata.</div>`:""}`;
-  }
-
-  return tabsHtml+`<div style="text-align:center;padding:40px;color:#A1A1AA">Selecione uma aba</div>`;
+  </div>`;
 }
 
 // ─── VENDEDORES (CRUD COMPLETO) ───────────────────────────────────────────────
@@ -1651,15 +1064,6 @@ function buildConta(){
     <div class="fg"><label class="fl">Nova Senha</label><input type="password" class="fc" id="c-nova" placeholder="Mínimo 4 caracteres"></div>
     <div class="fg"><label class="fl">Confirmar</label><input type="password" class="fc" id="c-conf" placeholder="Repita"></div>
     <button class="btn btn-red btn-full" onclick="saveSenha()">Salvar Senha</button>
-  </div>
-  <div class="card" style="padding:16px;margin-top:14px;border-left:4px solid #2563EB">
-    <div class="sec-title">💾 Backup dos Dados</div>
-    <div style="font-size:12px;color:#52525B;margin-bottom:12px">Os dados são salvos automaticamente neste navegador. Use o backup para exportar uma cópia de segurança ou migrar para outro dispositivo.</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-blu" style="flex:1" onclick="exportarBackup()">⬇️ Exportar Backup</button>
-      <button class="btn" style="flex:1" onclick="importarBackup()">⬆️ Restaurar Backup</button>
-    </div>
-    <div style="font-size:11px;color:#A1A1AA;margin-top:8px;text-align:center">Recomendado: faça backup toda semana</div>
   </div></div>`;
 }
 
@@ -1690,20 +1094,11 @@ function buildModal(){
     <div id="m-outro-wrap" style="display:none" class="fg"><label class="fl">Descreva *</label><textarea class="fc" id="m-outro" placeholder="O que aconteceu?"></textarea></div>`;
     footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doPerdido()" style="flex:1">Confirmar</button>`;
   } else if(m==="histo"){
-    const tent=(l?.tentativas||0)+1;
-    const dicas=["Primeiro contato — apresente-se e descubra o interesse","Segundo contato — reforce o interesse e tire dúvidas","Terceiro contato — ofereça algo diferente, como visita ao showroom","Quarto contato — última tentativa antes de pausar o lead"];
-    const dica=dicas[Math.min(tent-1,3)]||"";
-    title="📋 Registrar Contato #"+tent;
-    body=`<div class="alert al-blu" style="margin-bottom:14px;font-size:12px">💡 ${dica}</div>
-    <div class="fg"><label class="fl">Canal</label><select class="fc" id="m-tipo">${CANAIS.map(c=>`<option>${c}</option>`).join("")}</select></div>
-    <div class="fg"><label class="fl">O cliente respondeu?</label>
-    <div style="display:flex;gap:8px;margin-top:6px">
-      <button id="btn-sim" type="button" onclick="selResp('sim')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #E4E4E7;background:#fff;cursor:pointer;font-size:13px;font-weight:600">✅ Sim</button>
-      <button id="btn-nao" type="button" onclick="selResp('nao')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #C41E3A;background:#FEE2E2;cursor:pointer;font-size:13px;font-weight:600;color:#C41E3A">❌ Não</button>
-    </div>
-    <input type="hidden" id="m-respondeu" value="nao"></div>
-    <div class="fg"><label class="fl">Observação (opcional)</label><textarea class="fc" id="m-hobs" placeholder="O que aconteceu, o que foi conversado..."></textarea></div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doHisto()" style="flex:1">💾 Salvar</button>`;
+    title="📋 Registrar Contato";
+    body=`<div class="fg"><label class="fl">Tipo de Contato</label><select class="fc" id="m-tipo">${CANAIS.map(c=>`<option>${c}</option>`).join("")}</select></div>
+    <div class="fg"><label class="fl">Resultado *</label><input class="fc" id="m-res" placeholder="Ex: Respondeu, Agendou visita..."></div>
+    <div class="fg"><label class="fl">Observação</label><textarea class="fc" id="m-hobs" placeholder="Detalhes adicionais..."></textarea></div>`;
+    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doHisto()" style="flex:1">Salvar</button>`;
   } else if(m==="editObs"){
     title="✏️ Observações";
     body=`<div class="fg"><label class="fl">Observações do Lead</label><textarea class="fc" id="m-obs-txt" style="min-height:120px" placeholder="Digite observações...">${l?.obs||""}</textarea></div>`;
@@ -1773,7 +1168,7 @@ window.doLogin=function(){
   const em=(document.getElementById("li-em")?.value||"").trim();
   const pw=document.getElementById("li-pw")?.value||"";
   const u=S.users.find(x=>x.email===em&&x.pass===pw&&x.ativo);
-  if(u){S.user=u;S.screen="dash";S.sel=null;S.detailTab="info";S.showNotif=true;salvarDados();render();}
+  if(u){S.user=u;S.screen="dash";S.sel=null;S.detailTab="info";S.showNotif=true;render();}
   else{const e=document.getElementById("li-err");if(e)e.style.display="flex";}
 };
 window.logout=function(){S.user=null;S.sel=null;render();};
@@ -1781,78 +1176,8 @@ window.go=function(k){S.screen=k;S.sel=null;S.sideOpen=false;S.leadFiltro={q:"",
 window.toggleSide=function(){S.sideOpen=!S.sideOpen;render();};
 window.openLead=function(id){S.sel=S.leads.find(l=>l.id===id)||null;S.detailTab="info";S.sideOpen=false;render();};
 window.back=function(){S.sel=null;render();};
-window.openModal=function(m){
-  if(!S.sel&&m!=='addlead'&&m!=='addVendedor'){return;}
-  S.modal=m;
-  // Construir modal sem rerenderContent
-  const l=S.sel;
-  let title="",body="",footer="";
-  if(m==="fechado"){
-    title="✅ Registrar Venda Fechada";
-    body=`<div class="alert al-grn" style="margin-bottom:14px">💰 Informe o valor exato e a data do fechamento.</div>
-    <div class="fg"><label class="fl">Valor da Venda (R$) *</label><input type="number" class="fc" id="m-valor" value="${l?.valorVenda||""}" placeholder="Ex: 45000"></div>
-    <div class="fg"><label class="fl">Data do Fechamento *</label><input type="date" class="fc" id="m-fdata" value="${l?.dataFechamento||today()}"></div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-grn" onclick="doFechado()" style="flex:1">Confirmar</button>`;
-  } else if(m==="follow"){
-    title="📅 Agendar Follow-up";
-    body=`<div class="fg"><label class="fl">Data *</label><input type="date" class="fc" id="m-data" value="${l?.follow||""}"></div>
-    <div class="fg"><label class="fl">Canal</label><select class="fc" id="m-canal">${CANAIS.map(c=>`<option>${c}</option>`).join("")}</select></div>
-    <div class="fg"><label class="fl">Observação</label><textarea class="fc" id="m-obs" placeholder="Objetivo do contato..."></textarea></div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doFollow()" style="flex:1">Salvar</button>`;
-  } else if(m==="status"){
-    title="🔄 Alterar Status";
-    body=`<div class="fg"><label class="fl">Novo Status</label><select class="fc" id="m-status">${STATUS_L.map(s=>`<option value="${s}" ${l?.status===s?"selected":""}>${s}</option>`).join("")}</select></div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doStatus()" style="flex:1">Confirmar</button>`;
-  } else if(m==="perdido"){
-    title="❌ Registrar Perda";
-    body=`<div class="alert al-red" style="margin-bottom:14px">⚠️ Informe o motivo para ajudar a melhorar o processo.</div>
-    <div class="fg"><label class="fl">Motivo *</label><select class="fc" id="m-motivo" onchange="document.getElementById('m-outro-wrap').style.display=this.value==='Outro motivo'?'block':'none'"><option value="">Selecione...</option>${MOTIVOS.map(mo=>`<option>${mo}</option>`).join("")}</select></div>
-    <div id="m-outro-wrap" style="display:none" class="fg"><label class="fl">Descreva *</label><textarea class="fc" id="m-outro" placeholder="O que aconteceu?"></textarea></div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doPerdido()" style="flex:1">Confirmar</button>`;
-  } else if(m==="histo"){
-    const tent=(l?.tentativas||0)+1;
-    const dicas=["Primeiro contato — apresente-se e descubra o interesse","Segundo contato — reforce o interesse e tire dúvidas","Terceiro contato — ofereça algo diferente, como visita ao showroom","Quarto contato — última tentativa antes de pausar o lead"];
-    const dica=dicas[Math.min(tent-1,3)]||"";
-    title="📋 Registrar Contato #"+tent;
-    body=`<div class="alert al-blu" style="margin-bottom:14px;font-size:12px">💡 ${dica}</div>
-    <div class="fg"><label class="fl">Canal</label><select class="fc" id="m-tipo">${CANAIS.map(c=>`<option>${c}</option>`).join("")}</select></div>
-    <div class="fg"><label class="fl">O cliente respondeu?</label>
-    <div style="display:flex;gap:8px;margin-top:6px">
-      <button id="btn-sim" type="button" onclick="selResp('sim')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #E4E4E7;background:#fff;cursor:pointer;font-size:13px;font-weight:600">✅ Sim</button>
-      <button id="btn-nao" type="button" onclick="selResp('nao')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #C41E3A;background:#FEE2E2;cursor:pointer;font-size:13px;font-weight:600;color:#C41E3A">❌ Não</button>
-    </div>
-    <input type="hidden" id="m-respondeu" value="nao"></div>
-    <div class="fg"><label class="fl">Observação (opcional)</label><textarea class="fc" id="m-hobs" placeholder="O que aconteceu, o que foi conversado..."></textarea></div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doHisto()" style="flex:1">💾 Salvar</button>`;
-  } else if(m==="editObs"){
-    title="✏️ Observações";
-    body=`<div class="fg"><label class="fl">Observações do Lead</label><textarea class="fc" id="m-obs-txt" style="min-height:120px" placeholder="Digite observações...">${(l?.obs||"").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</textarea></div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-blu" onclick="doEditObs()" style="flex:1">💾 Salvar</button>`;
-  } else if(m==="addlead"){
-    title="➕ Novo Lead";
-    body=`<div class="alert al-pur" style="margin-bottom:14px">📤 Leads criados ficam pendentes até a Júlia distribuir.</div>
-    <div class="fg"><label class="fl">Nome *</label><input class="fc" id="al-nome" placeholder="Nome completo"></div>
-    <div class="fg"><label class="fl">Telefone *</label><input class="fc" id="al-tel" placeholder="(11) 99999-9999"></div>
-    <div class="fg"><label class="fl">E-mail</label><input class="fc" id="al-email"></div>
-    <div class="g2c" style="gap:10px">
-      <div class="fg"><label class="fl">Origem</label><select class="fc" id="al-origem">${ORIGENS.map(o=>`<option>${o}</option>`).join("")}</select></div>
-      <div class="fg"><label class="fl">Interesse</label><select class="fc" id="al-int">${INTERESSES.map(i=>`<option>${i}</option>`).join("")}</select></div>
-      <div class="fg"><label class="fl">Orçamento</label><input class="fc" id="al-orc" placeholder="R$ 0.000"></div>
-      <div class="fg"><label class="fl">Prazo</label><select class="fc" id="al-prazo">${["Imediato","Até 3 meses","Até 6 meses","Até 1 ano","Acima de 1 ano"].map(p=>`<option>${p}</option>`).join("")}</select></div>
-      <div class="fg"><label class="fl">Imóvel</label><select class="fc" id="al-imovel"><option>Sim</option><option>Não</option><option>Em obra</option></select></div>
-    </div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doAddLead()" style="flex:1">Cadastrar</button>`;
-  } else if(m==="addVendedor"){
-    title="➕ Cadastrar Novo Vendedor";
-    body=`<div class="fg"><label class="fl">Nome Completo *</label><input class="fc" id="nv-nome" placeholder="Nome do vendedor"></div>
-    <div class="fg"><label class="fl">E-mail *</label><input class="fc" id="nv-email" placeholder="email@italinea.com.br"></div>
-    <div class="fg"><label class="fl">Senha *</label><input class="fc" id="nv-pass" placeholder="Mínimo 4 caracteres"></div>
-    <div class="fg"><label class="fl">Função</label><select class="fc" id="nv-role"><option value="vendedor">Vendedor</option><option value="distrib">Distribuição</option></select></div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-grn" onclick="cadastrarVendedor()" style="flex:1">Cadastrar</button>`;
-  }
-  abrirModalNativo(title, body, footer);
-};
-window.closeModal=function(){S.modal=null;fecharModalNativo();};
+window.openModal=function(m){S.modal=m;rerenderContent();};
+window.closeModal=function(){S.modal=null;rerenderContent();};
 
 // DISTRIBUIÇÃO
 window.distribuir=function(id,selId){
@@ -1864,7 +1189,6 @@ window.distribuir=function(id,selId){
   const upd=prep({...S.leads.find(x=>x.id===id),vid,distribuidoPor:S.user.id,dataDistrib:today()});
   S.leads=S.leads.map(x=>x.id===id?upd:x);
   toast(`✅ ${upd.nome} → ${vend.nome}`,"grn");
-  salvarDados();
   rerenderContent();
 };
 window.redistribuir=function(id,selId){
@@ -1877,7 +1201,6 @@ window.redistribuir=function(id,selId){
   const upd=prep({...l,vid,distribuidoPor:S.user.id,dataDistrib:today()});
   S.leads=S.leads.map(x=>x.id===id?upd:x);
   toast(`✅ Reatribuído para ${vend.nome}`,"pur");
-  salvarDados();
   rerenderContent();
 };
 window.distribuirInline=function(id){
@@ -1886,7 +1209,7 @@ window.distribuirInline=function(id){
   const vend=S.users.find(u=>u.id===vid);
   const upd=prep({...S.leads.find(x=>x.id===id),vid,distribuidoPor:S.user.id,dataDistrib:today()});
   S.leads=S.leads.map(x=>x.id===id?upd:x);
-  S.sel=upd; toast(`✅ Distribuído para ${vend.nome}`,"grn"); salvarDados(); rerenderContent();
+  S.sel=upd; toast(`✅ Distribuído para ${vend.nome}`,"grn"); rerenderContent();
 };
 window.redistribuirInline=function(id){
   const vid=parseInt(document.getElementById("redist-inline")?.value||"");
@@ -1896,12 +1219,12 @@ window.redistribuirInline=function(id){
   const vend=S.users.find(u=>u.id===vid);
   const upd=prep({...l,vid,distribuidoPor:S.user.id,dataDistrib:today()});
   S.leads=S.leads.map(x=>x.id===id?upd:x);
-  S.sel=upd; toast(`✅ Reatribuído para ${vend.nome}`,"pur"); salvarDados(); rerenderContent();
+  S.sel=upd; toast(`✅ Reatribuído para ${vend.nome}`,"pur"); rerenderContent();
 };
 
 // JORNADA
-window.marcarRespondeu=function(id){const upd=prep({...S.sel,respondeu:true});S.leads=S.leads.map(x=>x.id===id?upd:x);S.sel=upd;salvarDados();toast("✅ Marcado como respondeu","grn");rerenderContent();};
-window.marcarVisitou=function(id){const upd=prep({...S.sel,visitou:true,status:"Visita realizada"});S.leads=S.leads.map(x=>x.id===id?upd:x);S.sel=upd;salvarDados();toast("🏠 Visita registrada","grn");rerenderContent();};
+window.marcarRespondeu=function(id){const upd=prep({...S.sel,respondeu:true});S.leads=S.leads.map(x=>x.id===id?upd:x);S.sel=upd;toast("✅ Marcado como respondeu","grn");rerenderContent();};
+window.marcarVisitou=function(id){const upd=prep({...S.sel,visitou:true,status:"Visita realizada"});S.leads=S.leads.map(x=>x.id===id?upd:x);S.sel=upd;toast("🏠 Visita registrada","grn");rerenderContent();};
 
 // MODAIS
 window.doFechado=function(){
@@ -1911,7 +1234,7 @@ window.doFechado=function(){
   if(!val||isNaN(vNum)||vNum<=0)return alert("Informe o valor da venda");
   const upd=prep({...S.sel,status:"Venda fechada",valorVenda:vNum,dataFechamento:fdata});
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; fecharModalNativo(); toast("💰 Venda registrada! "+fmtM(vNum),"grn"); salvarDados(); rerenderContent();
+  S.sel=upd; S.modal=null; toast("💰 Venda registrada! "+fmtM(vNum),"grn"); rerenderContent();
 };
 window.doFollow=function(){
   const data=document.getElementById("m-data")?.value||"";
@@ -1922,7 +1245,7 @@ window.doFollow=function(){
   const upd={...S.sel,follow:data};
   if(obs)upd.hist=[...(S.sel.hist||[]),{data:today(),vendedor:v?.nome||S.user.nome,tipo:canal,resultado:`Follow-up agendado para ${fmtD(data)}`,obs}];
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; fecharModalNativo(); toast("📅 Follow-up agendado para "+fmtD(data),"blu"); salvarDados(); rerenderContent();
+  S.sel=upd; S.modal=null; toast("📅 Follow-up agendado para "+fmtD(data),"blu"); rerenderContent();
 };
 window.doStatus=function(){
   const ns=document.getElementById("m-status")?.value||"";
@@ -1930,254 +1253,41 @@ window.doStatus=function(){
   if(ns==="Venda fechada"){S.modal="fechado";rerenderContent();return;}
   const upd=prep({...S.sel,status:ns});
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; fecharModalNativo(); toast("🔄 Status atualizado","blu"); salvarDados(); rerenderContent();
+  S.sel=upd; S.modal=null; toast("🔄 Status atualizado","blu"); rerenderContent();
 };
 window.doPerdido=function(){
   const motivo=document.getElementById("m-motivo")?.value||"";
   const outro=document.getElementById("m-outro")?.value||"";
   if(!motivo)return alert("Selecione o motivo");
   if(motivo==="Outro motivo"&&!outro)return alert("Descreva o motivo");
-  const nContatos=(S.sel?.tentativas||0);
-  const hist=S.sel?.hist||[];
-  const primeiroTs=hist.length>0?hist[0].ts:null;
-  const diasDecorridos=primeiroTs?Math.round((Date.now()-primeiroTs)/(1000*60*60*24)):0;
-  if(nContatos<4){
-    if(!confirm("⚠️ Atenção!\n\nEste lead tem apenas "+nContatos+" contato(s) registrado(s).\n\nA política da Italínea exige pelo menos 4 tentativas antes de descartar.\n\nDeseja descartar mesmo assim?"))return;
-  } else if(diasDecorridos<5){
-    if(!confirm("⚠️ Atenção!\n\nEste lead está sendo trabalhado há apenas "+diasDecorridos+" dia(s).\n\nA política exige pelo menos 5 dias de tentativas antes de descartar.\n\nDeseja descartar mesmo assim?"))return;
-  }
   const upd=prep({...S.sel,status:"Venda perdida",motivo:motivo==="Outro motivo"?outro:motivo});
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; fecharModalNativo(); toast("❌ Venda perdida registrada","red"); salvarDados(); rerenderContent();
+  S.sel=upd; S.modal=null; toast("Venda perdida registrada","red"); rerenderContent();
 };
 window.doHisto=function(){
   const tipo=document.getElementById("m-tipo")?.value||"WhatsApp";
-  const respondeu=document.getElementById("m-respondeu")?.value||"nao";
+  const res=document.getElementById("m-res")?.value||"";
   const obs=document.getElementById("m-hobs")?.value||"";
-  if(!obs&&respondeu==="nao"){}// obs opcional se não respondeu
+  if(!res)return alert("Informe o resultado do contato");
   const v=S.users.find(x=>x.id===S.sel.vid);
-  const agora=new Date();
-  const resultado=respondeu==="sim"?"Cliente respondeu":"Sem resposta";
-  const n={data:today(),hora:agora.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),ts:agora.getTime(),vendedor:v?.nome||S.user.nome,tipo,resultado,obs,respondeu:respondeu==="sim"};
-  const novasTentativas=(S.sel.tentativas||0)+1;
-
-  // Verificar intervalos mínimos
-  const hist=S.sel.hist||[];
-  const ultimoContato=hist.length>0?hist[hist.length-1]:null;
-  let avisoIntervalo="";
-  if(ultimoContato&&ultimoContato.ts){
-    const diffMs=agora.getTime()-ultimoContato.ts;
-    const diffH=diffMs/(1000*60*60);
-    const diffD=diffMs/(1000*60*60*24);
-    if(novasTentativas===2&&diffH<4){
-      avisoIntervalo="⚠️ 2º contato idealmente com 4h de intervalo. Registrado mesmo assim.";
-    } else if(novasTentativas===3&&diffD<1){
-      avisoIntervalo="⚠️ 3º contato idealmente no dia seguinte. Registrado mesmo assim.";
-    } else if(novasTentativas===4&&diffD<3){
-      avisoIntervalo="⚠️ 4º contato idealmente após 3 dias. Registrado mesmo assim.";
-    }
-    if(avisoIntervalo) toast(avisoIntervalo,"amb");
-  }
-
-  // Status automático baseado na resposta
-  let novoStatus=S.sel.status;
-  if(respondeu==="sim"){
-    if(S.sel.status==="Novo lead"||S.sel.status==="Sem resposta"||S.sel.status==="Contato pendente")
-      novoStatus="Em atendimento";
-  } else {
-    if(S.sel.status==="Novo lead"||S.sel.status==="Contato pendente")
-      novoStatus="Sem resposta";
-  }
-
-  // Follow-up automático se não respondeu
-  let novoFollow=S.sel.follow;
-  if(respondeu==="nao"){
-    const proxData=new Date(agora);
-    if(novasTentativas===1) proxData.setHours(proxData.getHours()+4);
-    else if(novasTentativas===2) proxData.setDate(proxData.getDate()+1);
-    else if(novasTentativas===3) proxData.setDate(proxData.getDate()+2);
-    else if(novasTentativas>=4) proxData.setDate(proxData.getDate()+2);
-    novoFollow=proxData.toISOString().split("T")[0];
-  }
-
-  const upd=prep({...S.sel,hist:[...hist,n],tentativas:novasTentativas,
-    respondeu:S.sel.respondeu||(respondeu==="sim"),status:novoStatus,follow:novoFollow});
+  const n={data:today(),vendedor:v?.nome||S.user.nome,tipo,resultado:res,obs};
+  const upd={...S.sel,hist:[...(S.sel.hist||[]),n],tentativas:(S.sel.tentativas||0)+1,respondeu:S.sel.respondeu||res.toLowerCase().includes("respond")};
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; fecharModalNativo(); salvarDados();
-  if(!avisoIntervalo) toast("📋 Contato registrado","grn");
-
-  // Se respondeu, perguntar se quer avançar etapa
-  if(respondeu==="sim"){
-    setTimeout(()=>perguntarAvancarEtapa(upd),300);
-  } else {
-    // Sem resposta: perguntar se quer agendar próximo contato
-    setTimeout(()=>perguntarAgendarFollowup(upd, novoFollow, novasTentativas),300);
-  }
-};
-
-// Perguntar se quer agendar follow-up após contato sem resposta
-function perguntarAgendarFollowup(l, datasugerida, tentativa){
-  const horaLabel = tentativa===1 ? "daqui 4 horas" :
-                    tentativa===2 ? "amanhã" :
-                    tentativa===3 ? "em 2 dias" : "em 2 dias";
-  const dataFmt = datasugerida ? fmtD(datasugerida) : "—";
-  abrirModalNativo(
-    "📅 Agendar Próximo Contato?",
-    '<div style="text-align:center;padding:8px 0">'+
-    '<div style="font-size:36px;margin-bottom:10px">📵</div>'+
-    '<div style="font-size:14px;font-weight:700;margin-bottom:6px">Cliente não respondeu</div>'+
-    '<div style="font-size:12px;color:#52525B;margin-bottom:16px">Tente novamente '+horaLabel+'</div>'+
-    '<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:10px;padding:12px 16px;margin-bottom:14px;text-align:left">'+
-    '<div style="font-size:10px;font-weight:700;color:#92400E;text-transform:uppercase;margin-bottom:4px">📅 Sugestão de follow-up</div>'+
-    '<div style="font-size:16px;font-weight:700;color:#D97706">'+dataFmt+'</div>'+
-    '<div style="font-size:11px;color:#92400E;margin-top:2px">Tentativa #'+(tentativa+1)+'</div>'+
-    '</div>'+
-    '<div class="fg" style="text-align:left">'+
-    '<label style="font-size:11px;font-weight:600;color:#52525B;display:block;margin-bottom:4px">Ajustar data (opcional)</label>'+
-    '<input type="date" id="fu-data" value="'+l.follow+'" style="width:100%;padding:8px 12px;border:1.5px solid #E4E4E7;border-radius:8px;font-size:13px;font-family:inherit">'+
-    '</div>'+
-    '<div class="fg" style="text-align:left">'+
-    '<label style="font-size:11px;font-weight:600;color:#52525B;display:block;margin-bottom:4px">O que abordar nesse contato?</label>'+
-    '<input type="text" id="fu-assunto" placeholder="Ex: Reforçar interesse, oferecer visita..." style="width:100%;padding:8px 12px;border:1.5px solid #E4E4E7;border-radius:8px;font-size:13px;font-family:inherit">'+
-    '</div></div>',
-    '<button onclick="fecharModalNativo();rerenderContent()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#F0F0F0;cursor:pointer;font-size:13px">Não agendar</button>'+
-    '<button onclick="confirmarFollowupAuto('+l.id+')" style="flex:1;padding:10px;border-radius:8px;border:none;background:#D97706;color:#fff;cursor:pointer;font-size:13px;font-weight:600">📅 Agendar</button>'
-  );
-}
-
-window.confirmarFollowupAuto = function(leadId) {
-  const dataEl = document.getElementById('fu-data');
-  const assuntoEl = document.getElementById('fu-assunto');
-  const data = dataEl?.value || today();
-  const assunto = assuntoEl?.value || "";
-  const l = S.leads.find(x=>x.id===leadId);
-  if(!l) return;
-  // Salvar follow-up e assunto
-  const upd = {...l, follow: data, followAssunto: assunto};
-  S.leads = S.leads.map(x=>x.id===leadId?upd:x);
-  if(S.sel?.id===leadId) S.sel=upd;
-  fecharModalNativo();
-  salvarDados();
-  toast("📅 Follow-up agendado para "+fmtD(data),"amb");
-  rerenderContent();
-};
-
-// Perguntar se quer avançar etapa após contato com resposta
-function perguntarAvancarEtapa(l){
-  const proximaEtapa=calcProximaEtapa(l);
-  if(!proximaEtapa){rerenderContent();return;}
-  abrirModalNativo(
-    "🚀 Avançar na Jornada?",
-    '<div style="text-align:center;padding:8px 0">' +
-    '<div style="font-size:42px;margin-bottom:12px">✅</div>' +
-    '<div style="font-size:15px;font-weight:700;margin-bottom:8px">Cliente respondeu!</div>' +
-    '<div style="font-size:13px;color:#52525B;margin-bottom:16px">Deseja avançar o lead para a próxima etapa?</div>' +
-    '<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;padding:12px 16px">' +
-    '<div style="font-size:11px;color:#0369A1;font-weight:700;text-transform:uppercase;margin-bottom:4px">Próxima etapa</div>' +
-    '<div style="font-size:16px;font-weight:700;color:#0284C7">' + proximaEtapa.nome + '</div>' +
-    '<div style="font-size:12px;color:#0369A1;margin-top:4px">' + proximaEtapa.dica + '</div>' +
-    '</div></div>',
-    '<button onclick="fecharModalNativo();rerenderContent()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#F0F0F0;cursor:pointer;font-size:13px">Manter etapa atual</button>' +
-    '<button onclick="avancarEtapa()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#C41E3A;color:#fff;cursor:pointer;font-size:13px;font-weight:600">Avançar ✅</button>'
-  );
-}
-
-function calcProximaEtapa(l){
-  const etapas=[
-    {status:"Em atendimento",   nome:"🔍 Qualificação",     dica:"Peça as medidas, entenda o projeto e tire as dúvidas do cliente"},
-    {status:"Lead qualificado", nome:"🏠 Agendar Visita",    dica:"Convide o cliente para conhecer o showroom e ver os materiais"},
-    {status:"Visita agendada",  nome:"📋 Enviar Orçamento",  dica:"Prepare e envie o orçamento personalizado do projeto"},
-    {status:"Orçamento enviado",nome:"🤝 Negociação",        dica:"Negocie condições, prazo e forma de pagamento"},
-    {status:"Negociação",       nome:"✅ Fechar Venda",      dica:"Confirme os detalhes finais e registre o fechamento"},
-  ];
-  return etapas.find(e=>e.status===l.status)||null;
-}
-
-window.avancarEtapa=function(){
-  if(!S.sel)return;
-  const etapas={
-    "Em atendimento":"Lead qualificado",
-    "Lead qualificado":"Visita agendada",
-    "Visita agendada":"Orçamento enviado",
-    "Orçamento enviado":"Negociação",
-  };
-  const novoStatus=etapas[S.sel.status];
-  if(!novoStatus){fecharModalNativo();rerenderContent();return;}
-  const upd=prep({...S.sel,status:novoStatus});
-  S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; fecharModalNativo(); salvarDados();
-  toast("🚀 Etapa avançada: "+novoStatus,"grn");
-  // Perguntar se quer agendar follow-up para a nova etapa
-  setTimeout(()=>perguntarFollowupEtapa(upd, novoStatus),300);
-};
-
-function perguntarFollowupEtapa(l, etapa){
-  const dicas = {
-    "Lead qualificado": "Peça as medidas do ambiente e tire as dúvidas sobre o projeto",
-    "Visita agendada":  "Confirmar visita, preparar apresentação do showroom",
-    "Orçamento enviado":"Acompanhar se o cliente recebeu e tirar dúvidas do orçamento",
-    "Negociação":       "Negociar condições, prazo e forma de pagamento",
-  };
-  const dica = dicas[etapa] || "Acompanhar o andamento";
-  // Sugerir follow-up em 2 dias
-  const sugestao = new Date();
-  sugestao.setDate(sugestao.getDate()+2);
-  const dataFu = sugestao.toISOString().split("T")[0];
-
-  abrirModalNativo(
-    "📅 Agendar Follow-up?",
-    '<div style="text-align:center;padding:8px 0">'+
-    '<div style="font-size:36px;margin-bottom:10px">🚀</div>'+
-    '<div style="font-size:14px;font-weight:700;margin-bottom:6px">Etapa avançada!</div>'+
-    '<div style="font-size:12px;color:#52525B;margin-bottom:16px">Quer agendar o próximo contato com '+l.nome.split(" ")[0]+'?</div>'+
-    '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 16px;margin-bottom:14px;text-align:left">'+
-    '<div style="font-size:10px;font-weight:700;color:#1E40AF;text-transform:uppercase;margin-bottom:4px">💡 O que abordar</div>'+
-    '<div style="font-size:13px;color:#1D4ED8">'+dica+'</div>'+
-    '</div>'+
-    '<div class="fg" style="text-align:left">'+
-    '<label style="font-size:11px;font-weight:600;color:#52525B;display:block;margin-bottom:4px">Data do próximo contato</label>'+
-    '<input type="date" id="fu-etapa-data" value="'+dataFu+'" style="width:100%;padding:8px 12px;border:1.5px solid #E4E4E7;border-radius:8px;font-size:13px;font-family:inherit">'+
-    '</div>'+
-    '<div class="fg" style="text-align:left">'+
-    '<label style="font-size:11px;font-weight:600;color:#52525B;display:block;margin-bottom:4px">O que precisa fazer nesse contato?</label>'+
-    '<input type="text" id="fu-etapa-assunto" value="'+dica+'" style="width:100%;padding:8px 12px;border:1.5px solid #E4E4E7;border-radius:8px;font-size:13px;font-family:inherit">'+
-    '</div></div>',
-    '<button onclick="fecharModalNativo();rerenderContent()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#F0F0F0;cursor:pointer;font-size:13px">Não agora</button>'+
-    '<button onclick="confirmarFollowupEtapa('+l.id+')" style="flex:1;padding:10px;border-radius:8px;border:none;background:#2563EB;color:#fff;cursor:pointer;font-size:13px;font-weight:600">📅 Agendar</button>'
-  );
-}
-
-window.confirmarFollowupEtapa = function(leadId) {
-  const dataEl = document.getElementById('fu-etapa-data');
-  const assuntoEl = document.getElementById('fu-etapa-assunto');
-  const data = dataEl?.value || today();
-  const assunto = assuntoEl?.value || "";
-  const l = S.leads.find(x=>x.id===leadId);
-  if(!l) return;
-  const upd = {...l, follow: data, followAssunto: assunto};
-  S.leads = S.leads.map(x=>x.id===leadId?upd:x);
-  if(S.sel?.id===leadId) S.sel=upd;
-  fecharModalNativo();
-  salvarDados();
-  toast("📅 Follow-up agendado para "+fmtD(data),"blu");
-  rerenderContent();
+  S.sel=upd; S.modal=null; toast("📋 Contato registrado","grn"); rerenderContent();
 };
 window.doEditObs=function(){
   const obs=document.getElementById("m-obs-txt")?.value||"";
-  if(!S.sel)return;
   const upd={...S.sel,obs};
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; fecharModalNativo(); salvarDados();
-  toast("✅ Observação salva","blu");
-  rerenderContent();
+  S.sel=upd; S.modal=null; toast("✅ Observação salva","blu"); rerenderContent();
 };
 window.doAddLead=function(){
   const nome=(document.getElementById("al-nome")?.value||"").trim();
   const tel=(document.getElementById("al-tel")?.value||"").trim();
   if(!nome||!tel)return alert("Nome e telefone são obrigatórios");
   const nl=prep({id:Date.now(),nome,tel,email:document.getElementById("al-email")?.value||"",entrada:today(),origem:document.getElementById("al-origem")?.value||"Instagram",interesse:document.getElementById("al-int")?.value||"Cozinha",orc:document.getElementById("al-orc")?.value||"",prazo:document.getElementById("al-prazo")?.value||"Até 3 meses",imovel:document.getElementById("al-imovel")?.value||"Sim",vid:null,distribuidoPor:null,dataDistrib:null,campanha:"Manual",status:"Novo lead",tentativas:0,hist:[],respondeu:false,visitou:false,follow:null,obs:"",valorVenda:null,dataFechamento:null});
-  S.leads=[nl,...S.leads]; S.modal=null; fecharModalNativo();
-  toast("✅ Lead cadastrado! Aguardando distribuição","pur"); salvarDados(); rerenderContent();
+  S.leads=[nl,...S.leads]; S.modal=null;
+  toast("✅ Lead cadastrado! Aguardando distribuição","pur"); rerenderContent();
 };
 
 // VENDEDORES CRUD
@@ -2191,17 +1301,17 @@ window.cadastrarVendedor=function(){
   if(S.users.find(u=>u.email===email))return alert("E-mail já cadastrado");
   const av=nome.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
   S.users.push({id:S.nextUserId++,role,nome,email,pass,av,ativo:true});
-  S.modal=null; fecharModalNativo(); toast(`✅ ${nome} cadastrado com sucesso!`,"grn"); salvarDados(); render();
+  S.modal=null; toast(`✅ ${nome} cadastrado com sucesso!`,"grn"); render();
 };
 window.desativarUser=function(id){
   if(!confirm("Desativar este usuário? Os leads dele serão mantidos."))return;
   S.users=S.users.map(u=>u.id===id?{...u,ativo:false}:u);
-  if(S.user.id===id){S.user=null;salvarDados();render();return;}
-  toast("🚫 Usuário desativado","red"); salvarDados(); rerenderContent();
+  if(S.user.id===id){S.user=null;render();return;}
+  toast("🚫 Usuário desativado","red"); rerenderContent();
 };
 window.reativarUser=function(id){
   S.users=S.users.map(u=>u.id===id?{...u,ativo:true}:u);
-  toast("✅ Usuário reativado","grn"); salvarDados(); rerenderContent();
+  toast("✅ Usuário reativado","grn"); rerenderContent();
 };
 window.toggleEditU=function(id){const el=document.getElementById(`vedit-${id}`);if(el)el.style.display=el.style.display==="none"?"block":"none";};
 window.saveUser=function(id){
@@ -2220,7 +1330,7 @@ window.saveUser=function(id){
   if(pe)pe.textContent=pass||u.pass;
   const ed=document.getElementById(`vedit-${id}`);
   if(ed)ed.style.display="none";
-  toast("✅ Alterações salvas","grn"); salvarDados(); rerenderContent();
+  toast("✅ Alterações salvas","grn"); rerenderContent();
 };
 window.saveDados=function(){
   const nome=(document.getElementById("cd-nome")?.value||"").trim();
@@ -2229,7 +1339,6 @@ window.saveDados=function(){
   const ini=nome.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
   S.users=S.users.map(x=>x.id===S.user.id?{...x,nome,email,av:ini}:x);
   S.user={...S.user,nome,email,av:ini};
-  salvarDados();
   const ok=document.getElementById("cd-ok");
   if(ok){ok.style.display="flex";setTimeout(()=>ok.style.display="none",2000);}
 };
@@ -2244,7 +1353,6 @@ window.saveSenha=function(){
   if(nova!==conf)return showMsg("err","Confirmação não confere.");
   S.users=S.users.map(u=>u.id===S.user.id?{...u,pass:nova}:u);
   S.user={...S.user,pass:nova};
-  salvarDados();
   ["c-atual","c-nova","c-conf"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
   showMsg("ok","✅ Senha alterada!");
 };
@@ -2253,14 +1361,14 @@ window.saveSenha=function(){
 window.salvarSheetsUrl=function(){
   const url=(document.getElementById("sheets-url")?.value||"").trim();
   if(!url)return alert("Cole a URL da planilha");
-  S.sheetsUrl=url; toast("✅ URL salva!","grn"); salvarDados(); rerenderContent();
+  S.sheetsUrl=url; toast("✅ URL salva!","grn"); rerenderContent();
 };
 window.salvarMapeamento=function(){
   ["nome","telefone","email","origem","interesse","orc","prazo"].forEach(k=>{
     const el=document.getElementById(`map-${k}`);
     if(el)S.sheetsMapeamento[k]=el.value.trim();
   });
-  toast("✅ Mapeamento salvo!","grn"); salvarDados(); rerenderContent();
+  toast("✅ Mapeamento salvo!","grn"); rerenderContent();
 };
 window.importarSheets=async function(){
   if(!S.sheetsUrl){alert("Configure a URL da planilha primeiro.");return;}
@@ -2299,91 +1407,8 @@ window.importarSheets=async function(){
     alert(`Erro ao importar: ${e.message}\n\nDica: A planilha precisa estar publicada como pública no Google Sheets (Arquivo → Publicar na web → CSV).`);
   }
   rerenderContent();
-  salvarDados();
 };
 
-
-// ─── MODAL NATIVO (rápido, sem rerenderContent) ───────────────────────────────
-window.fecharModalNativo = function() {
-  const ov = document.getElementById('modal-overlay');
-  if(ov) { ov.style.display = 'none'; }
-};
-
-function abrirModalNativo(title, body, footer) {
-  const ov = document.getElementById('modal-overlay');
-  const t  = document.getElementById('modal-title');
-  const b  = document.getElementById('modal-body');
-  const f  = document.getElementById('modal-footer');
-  if(!ov||!t||!b||!f) return;
-  t.textContent = title;
-  b.innerHTML   = body;
-  f.innerHTML   = footer;
-  ov.style.display = 'flex';
-  // Focar no primeiro input/textarea
-  setTimeout(() => {
-    const el = b.querySelector('textarea, input');
-    if(el) el.focus();
-  }, 50);
-}
-
-window.abrirModalObs = function() {
-  const l = S.sel;
-  if(!l) return;
-  const obsAtual = (l.obs||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  abrirModalNativo(
-    '✏️ Observações',
-    '<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:#A1A1AA;text-transform:uppercase">Observações do Lead</label><textarea id="obs-txt" style="width:100%;margin-top:6px;padding:9px 12px;border:1.5px solid #E4E4E7;border-radius:8px;font-size:13px;font-family:inherit;min-height:120px;resize:vertical;outline:none;box-sizing:border-box">'+obsAtual+'</textarea></div>',
-    '<button onclick="fecharModalNativo()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#F0F0F0;cursor:pointer;font-size:13px;font-weight:500">Cancelar</button><button onclick="salvarObsNativo()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#2563EB;color:#fff;cursor:pointer;font-size:13px;font-weight:600">💾 Salvar</button>'
-  );
-};
-
-window.salvarObsNativo = function() {
-  const txt = document.getElementById('obs-txt');
-  if(!txt || !S.sel) return;
-  const obs = txt.value;
-  const upd = {...S.sel, obs};
-  S.leads = S.leads.map(x => x.id === S.sel.id ? upd : x);
-  S.sel = upd;
-  fecharModalNativo();
-  salvarDados();
-  toast('✅ Observação salva', 'blu');
-  // Atualiza só o bloco de obs sem rerenderContent completo
-  const obsEl = document.getElementById('obs-display');
-  if(obsEl) {
-    obsEl.innerHTML = obs
-      ? '<div style="background:#F7F7F8;padding:9px 11px;border-radius:8px;font-size:13px">'+obs+'</div><button class="btn btn-blu" style="margin-top:8px;font-size:11px" onclick="abrirModalObs()">✏️ Editar</button>'
-      : '<button class="btn" style="margin-top:12px;font-size:11px" onclick="abrirModalObs()">✏️ Adicionar observação</button>';
-  } else {
-    rerenderContent();
-  }
-};
-
-
-window.abrirModalMeta = function() {
-  abrirModalNativo(
-    '🎯 Definir Meta Mensal',
-    `<div class="fg">
-       <label class="fl">Meta de Vendas em R$ (mês atual)</label>
-       <input type="number" class="fc" id="meta-val" value="${S.metaMensal||""}" placeholder="Ex: 150000" style="font-size:16px">
-       <div style="font-size:11px;color:#A1A1AA;margin-top:4px">Digite o valor total de vendas que a equipe deve atingir neste mês</div>
-     </div>`,
-    `<button onclick="fecharModalNativo()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#F0F0F0;cursor:pointer;font-size:13px;font-weight:500">Cancelar</button>
-     <button onclick="salvarMeta()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#C41E3A;color:#fff;cursor:pointer;font-size:13px;font-weight:600">💾 Salvar Meta</button>`
-  );
-};
-
-window.salvarMeta = function() {
-  const val = parseFloat(document.getElementById('meta-val')?.value || '0');
-  if(isNaN(val) || val < 0) return alert('Digite um valor válido');
-  S.metaMensal = val;
-  fecharModalNativo();
-  salvarDados();
-  const nv=vendedoresAtivos().length||1; toast('🎯 Meta da loja: '+fmtM(val)+' ('+fmtM(val/nv)+' por vendedor)', 'grn');
-  rerenderContent();
-};
-
-// Carrega dados salvos antes de exibir
-carregarDados();
 render();
 </script>
 </body>
