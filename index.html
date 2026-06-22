@@ -150,7 +150,7 @@ const S = {
   sheetsFromDate:"",
   // Google Sheets
   sheetsUrl:"",
-  sheetsMapeamento:{nome:"full_name",telefone:"phone",email:"email",origem:"platform",interesse:"qual_ambiente_deseja_planejar_?",orc:"em_média_quanto_espera_investir_em_planejados_?",prazo:"em_quanto_tempo_deseja_ter_seus_móveis_prontinhos_e_instalados_?",dataEntrada:"created_time"},
+  sheetsMapeamento:{nome:"full_name",telefone:"phone",email:"email",origem:"platform",interesse:"qual_ambiente_deseja_planejar_?",orc:"em_média_quanto_espera_investir_em_planejados_?",prazo:"em_quanto_tempo_deseja_ter_seus_móveis_prontinhos_e_instalados_?",dataEntrada:"created_time",imovel:"já_possui_outros_orçamentos_?"},
   lastImport:null,
   importLog:[],
 };
@@ -483,7 +483,7 @@ function buildApp(){
   else if(S.screen==="alertas")     content=buildAlertasPage();
   else if(S.screen==="leads")       content=buildLeads(ml);
   else if(S.screen==="distribuicao")content=buildDistribuicao();
-  else if(S.screen==="kanban")      content=buildKanban(ml);
+  
   else if(S.screen==="agenda")      content=buildAgenda(ml);
   else if(S.screen==="relatorios")  content=buildRelatorios();
   else if(S.screen==="vendedores")  content=buildVendedores();
@@ -513,7 +513,7 @@ function buildApp(){
         <div class="bn-ico">${n.i}</div><div class="bn-lbl">${n.l}</div>
       </div>`).join("")}
     </div></div>
-  </div>${S.modal?buildModal():""}`;
+  </div>`;
 }
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
@@ -957,11 +957,11 @@ function buildDetalhe(l){
     <button class="btn" onclick="openModal('histo')">📋 Contato</button>
     <button class="btn" onclick="openModal('follow')">📅 Follow-up</button>
     <button class="btn" onclick="openModal('status')">🔄 Status</button>
-    <a href="https://wa.me/55${l.tel.replace(/\D/g,"")}" target="_blank" class="btn" style="background:#25D366;color:#fff">📱 WA</a>
+    <a href="${gerarLinkWhatsApp(l)}" target="_blank" class="btn" style="background:#25D366;color:#fff">📱 WhatsApp</a>
     <button class="btn btn-grn" onclick="openModal('fechado')">✅ Registrar Venda</button>
     <button class="btn btn-red" onclick="openModal('perdido')">❌ Perdido</button>
   </div>`:`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
-    <a href="https://wa.me/55${l.tel.replace(/\D/g,"")}" target="_blank" class="btn" style="background:#25D366;color:#fff">📱 WhatsApp</a>
+    <a href="${gerarLinkWhatsApp(l)}" target="_blank" class="btn" style="background:#25D366;color:#fff">📱 WhatsApp</a>
     <span class="badge b-gray" style="padding:8px 12px;font-size:12px">👁️ Somente visualização</span>
   </div>`}
   <div class="tabs">
@@ -1216,6 +1216,15 @@ function buildConta(){
     <div class="fg"><label class="fl">Nova Senha</label><input type="password" class="fc" id="c-nova" placeholder="Mínimo 4 caracteres"></div>
     <div class="fg"><label class="fl">Confirmar</label><input type="password" class="fc" id="c-conf" placeholder="Repita"></div>
     <button class="btn btn-red btn-full" onclick="saveSenha()">Salvar Senha</button>
+  </div>
+  <div class="card" style="padding:16px;margin-top:14px;border-left:4px solid #2563EB">
+    <div class="sec-title">💾 Backup dos Dados</div>
+    <div style="font-size:12px;color:#52525B;margin-bottom:12px">Dados salvos automaticamente. Use o backup para exportar uma cópia ou restaurar em outro dispositivo.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-blu" style="flex:1" onclick="exportarBackup()">⬇️ Exportar Backup</button>
+      <button class="btn" style="flex:1" onclick="importarBackup()">⬆️ Restaurar Backup</button>
+    </div>
+    <div style="font-size:11px;color:#A1A1AA;margin-top:8px;text-align:center">Recomendado: faça backup toda semana</div>
   </div></div>`;
 }
 
@@ -1305,7 +1314,7 @@ function rerenderContent(){
   else if(S.screen==="alertas")     c=buildAlertasPage();
   else if(S.screen==="leads")       c=buildLeads(ml);
   else if(S.screen==="distribuicao")c=buildDistribuicao();
-  else if(S.screen==="kanban")      c=buildKanban(ml);
+  
   else if(S.screen==="agenda")      c=buildAgenda(ml);
   else if(S.screen==="relatorios")  c=buildRelatorios();
   else if(S.screen==="vendedores")  c=buildVendedores();
@@ -1320,7 +1329,7 @@ window.doLogin=function(){
   const em=(document.getElementById("li-em")?.value||"").trim();
   const pw=document.getElementById("li-pw")?.value||"";
   const u=S.users.find(x=>x.email===em&&x.pass===pw&&x.ativo);
-  if(u){S.user=u;S.screen="dash";S.sel=null;S.detailTab="info";S.showNotif=true;render();}
+  if(u){S.user=u;S.screen="dash";S.sel=null;S.detailTab="info";S.showNotif=true;salvarDados();render();}
   else{const e=document.getElementById("li-err");if(e)e.style.display="flex";}
 };
 window.logout=function(){S.user=null;S.sel=null;render();};
@@ -1328,8 +1337,78 @@ window.go=function(k){S.screen=k;S.sel=null;S.sideOpen=false;S.leadFiltro={q:"",
 window.toggleSide=function(){S.sideOpen=!S.sideOpen;render();};
 window.openLead=function(id){S.sel=S.leads.find(l=>l.id===id)||null;S.detailTab="info";S.sideOpen=false;render();};
 window.back=function(){S.sel=null;render();};
-window.openModal=function(m){S.modal=m;rerenderContent();};
-window.closeModal=function(){S.modal=null;rerenderContent();};
+window.openModal=function(m){
+  if(!S.sel&&m!=="addlead"&&m!=="addVendedor")return;
+  const l=S.sel;
+  S.modal=m;
+  let title="",body="",footer="";
+  if(m==="fechado"){
+    title="✅ Registrar Venda Fechada";
+    body=`<div class="alert al-grn" style="margin-bottom:14px">💰 Informe o valor exato e a data do fechamento.</div>
+    <div class="fg"><label class="fl">Valor da Venda (R$) *</label><input type="number" class="fc" id="m-valor" value="${l?.valorVenda||""}" placeholder="Ex: 45000"></div>
+    <div class="fg"><label class="fl">Data do Fechamento *</label><input type="date" class="fc" id="m-fdata" value="${l?.dataFechamento||today()}"></div>`;
+    footer=`<button class="btn" onclick="fecharModalNativo()" style="flex:1">Cancelar</button><button class="btn btn-grn" onclick="doFechado()" style="flex:1">Confirmar</button>`;
+  } else if(m==="follow"){
+    title="📅 Agendar Follow-up";
+    body=`<div class="fg"><label class="fl">Data *</label><input type="date" class="fc" id="m-data" value="${l?.follow||""}"></div>
+    <div class="fg"><label class="fl">Canal</label><select class="fc" id="m-canal">${CANAIS.map(c=>`<option>${c}</option>`).join("")}</select></div>
+    <div class="fg"><label class="fl">Observação</label><textarea class="fc" id="m-obs" placeholder="Objetivo do contato..."></textarea></div>`;
+    footer=`<button class="btn" onclick="fecharModalNativo()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doFollow()" style="flex:1">Salvar</button>`;
+  } else if(m==="status"){
+    title="🔄 Alterar Status";
+    body=`<div class="fg"><label class="fl">Novo Status</label><select class="fc" id="m-status">${STATUS_L.map(s=>`<option value="${s}" ${l?.status===s?"selected":""}>${s}</option>`).join("")}</select></div>`;
+    footer=`<button class="btn" onclick="fecharModalNativo()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doStatus()" style="flex:1">Confirmar</button>`;
+  } else if(m==="perdido"){
+    title="❌ Registrar Perda";
+    body=`<div class="alert al-red" style="margin-bottom:14px">⚠️ Informe o motivo para ajudar a melhorar o processo.</div>
+    <div class="fg"><label class="fl">Motivo *</label><select class="fc" id="m-motivo" onchange="document.getElementById('m-outro-wrap').style.display=this.value==='Outro motivo'?'block':'none'"><option value="">Selecione...</option>${MOTIVOS.map(mo=>`<option>${mo}</option>`).join("")}</select></div>
+    <div id="m-outro-wrap" style="display:none" class="fg"><label class="fl">Descreva *</label><textarea class="fc" id="m-outro" placeholder="O que aconteceu?"></textarea></div>`;
+    footer=`<button class="btn" onclick="fecharModalNativo()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doPerdido()" style="flex:1">Confirmar</button>`;
+  } else if(m==="histo"){
+    const tent=(l?.tentativas||0)+1;
+    const dicas=["📞 Ligue para o cliente — apresente-se e descubra o interesse","Segundo contato — reforce o interesse e tire dúvidas","Terceiro contato — ofereça visita ao showroom","Quarto contato — última tentativa antes de pausar"];
+    const dica=dicas[Math.min(tent-1,3)]||"";
+    title="📋 Registrar Contato #"+tent;
+    body=`<div class="alert al-blu" style="margin-bottom:14px;font-size:12px">💡 ${dica}</div>
+    <div class="fg"><label class="fl">Canal</label><select class="fc" id="m-tipo">${CANAIS.map(c=>`<option>${c}</option>`).join("")}</select></div>
+    <div class="fg"><label class="fl">O cliente respondeu?</label>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button id="btn-sim" type="button" onclick="selResp('sim')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #E4E4E7;background:#fff;cursor:pointer;font-size:13px;font-weight:600">✅ Sim</button>
+      <button id="btn-nao" type="button" onclick="selResp('nao')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #C41E3A;background:#FEE2E2;cursor:pointer;font-size:13px;font-weight:600;color:#C41E3A">❌ Não</button>
+    </div>
+    <input type="hidden" id="m-respondeu" value="nao"></div>
+    <div class="fg"><label class="fl">Observação (opcional)</label><textarea class="fc" id="m-hobs" placeholder="O que aconteceu, o que foi conversado..."></textarea></div>`;
+    footer=`<button class="btn" onclick="fecharModalNativo()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doHisto()" style="flex:1">💾 Salvar</button>`;
+  } else if(m==="editObs"){
+    const obsAtual=(l?.obs||"").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    title="✏️ Observações";
+    body=`<div class="fg"><label class="fl">Observações do Lead</label><textarea class="fc" id="m-obs-txt" style="min-height:120px" placeholder="Digite observações...">${obsAtual}</textarea></div>`;
+    footer=`<button class="btn" onclick="fecharModalNativo()" style="flex:1">Cancelar</button><button class="btn btn-blu" onclick="doEditObs()" style="flex:1">Salvar</button>`;
+  } else if(m==="addlead"){
+    title="➕ Novo Lead";
+    body=`<div class="alert al-pur" style="margin-bottom:14px">📤 Leads criados ficam pendentes até a Júlia distribuir.</div>
+    <div class="fg"><label class="fl">Nome *</label><input class="fc" id="al-nome" placeholder="Nome completo"></div>
+    <div class="fg"><label class="fl">Telefone *</label><input class="fc" id="al-tel" placeholder="(11) 99999-9999"></div>
+    <div class="fg"><label class="fl">E-mail</label><input class="fc" id="al-email"></div>
+    <div class="g2c" style="gap:10px">
+      <div class="fg"><label class="fl">Origem</label><select class="fc" id="al-origem">${ORIGENS.map(o=>`<option>${o}</option>`).join("")}</select></div>
+      <div class="fg"><label class="fl">Interesse</label><select class="fc" id="al-int">${INTERESSES.map(i=>`<option>${i}</option>`).join("")}</select></div>
+      <div class="fg"><label class="fl">Orçamento</label><input class="fc" id="al-orc" placeholder="R$ 0.000"></div>
+      <div class="fg"><label class="fl">Prazo</label><select class="fc" id="al-prazo"><option>Imediato</option><option>Até 3 meses</option><option>Até 6 meses</option><option>Até 1 ano</option><option>Acima de 1 ano</option></select></div>
+      <div class="fg"><label class="fl">Imóvel</label><select class="fc" id="al-imovel"><option>Sim</option><option>Não</option><option>Em obra</option></select></div>
+    </div>`;
+    footer=`<button class="btn" onclick="fecharModalNativo()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doAddLead()" style="flex:1">Cadastrar</button>`;
+  } else if(m==="addVendedor"){
+    title="➕ Cadastrar Novo Vendedor";
+    body=`<div class="fg"><label class="fl">Nome Completo *</label><input class="fc" id="nv-nome" placeholder="Nome do vendedor"></div>
+    <div class="fg"><label class="fl">E-mail *</label><input class="fc" id="nv-email" placeholder="email@italinea.com.br"></div>
+    <div class="fg"><label class="fl">Senha *</label><input type="password" class="fc" id="nv-pass" placeholder="Mínimo 4 caracteres"></div>
+    <div class="fg"><label class="fl">Função</label><select class="fc" id="nv-role"><option value="vendedor">Vendedor</option><option value="distrib">Distribuição</option></select></div>`;
+    footer=`<button class="btn" onclick="fecharModalNativo()" style="flex:1">Cancelar</button><button class="btn btn-grn" onclick="cadastrarVendedor()" style="flex:1">Cadastrar</button>`;
+  }
+  abrirModalNativo(title,body,footer);
+};
+window.closeModal=function(){S.modal=null;fecharModalNativo();};
 
 // DISTRIBUIÇÃO
 window.distribuir=function(id,selId){
