@@ -130,6 +130,7 @@ body{background:var(--bg);color:#18181B;font-size:14px;overflow:hidden;height:10
 <body>
 <div id="root"></div>
 <div id="toast" class="toast"></div>
+<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)fecharModalNativo()"><div id="modal-box" style="background:#fff;border-radius:16px;width:100%;max-width:520px;max-height:90dvh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="height:8px"></div><div id="modal-hd" style="padding:14px 18px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #E4E4E7"><span id="modal-title" style="font-size:15px;font-weight:700"></span><button onclick="fecharModalNativo()" style="background:#F0F0F0;border:none;cursor:pointer;padding:4px 10px;border-radius:6px;font-size:13px">✕</button></div><div id="modal-body" style="padding:16px 18px"></div><div id="modal-footer" style="padding:12px 18px;border-top:1px solid #E4E4E7;display:flex;gap:8px"></div></div></div>
 <script>
 // ─── ESTADO GLOBAL ────────────────────────────────────────────────────────────
 const S = {
@@ -141,13 +142,15 @@ const S = {
     {id:4,role:"agencia", nome:"Bruno (Anthropic)",  email:"bruno@anthropic.com",   pass:"bruno2025", av:"BR",ativo:true},
   ],
   user:null, screen:"dash", leads:[], sel:null, modal:null, sideOpen:false,
-  detailTab:"info", relTab:"mensal", distribFiltro:"pendentes",
+  detailTab:"info", relTab:"visaoMensal", relMes:5, relAno:2026, distribFiltro:"pendentes",
   leadFiltro:{q:"",prio:"",status:""},
   showNotif:true,
   nextUserId:5,
+  metaMensal:0,
+  sheetsFromDate:"",
   // Google Sheets
   sheetsUrl:"",
-  sheetsMapeamento:{nome:"Nome",telefone:"Telefone",email:"Email",origem:"Origem",interesse:"Interesse",orc:"Orçamento",prazo:"Prazo"},
+  sheetsMapeamento:{nome:"full_name",telefone:"phone",email:"email",origem:"platform",interesse:"qual_ambiente_deseja_planejar_?",orc:"em_média_quanto_espera_investir_em_planejados_?",prazo:"em_quanto_tempo_deseja_ter_seus_móveis_prontinhos_e_instalados_?",dataEntrada:"created_time"},
   lastImport:null,
   importLog:[],
 };
@@ -158,7 +161,7 @@ const STATUS_L   = ["Novo lead","Contato pendente","Em atendimento","Sem respost
 const MOTIVOS    = ["Sem resposta","Preço alto","Orçamento insuficiente","Comprou com concorrente","Sem imóvel próprio","Prazo longo","Sem interesse real","Atendimento demorou","Cliente desistiu","Outro motivo"];
 const INTERESSES = ["Cozinha","Quarto","Sala","Escritório","Casa completa","Closet","Banheiro","Área de serviço"];
 const ORIGENS    = ["Instagram","Facebook","Google","Indicação","Site"];
-const CANAIS     = ["WhatsApp","Ligação","E-mail","Reunião","Visita"];
+const CANAIS     = ["Ligação","WhatsApp","E-mail","Reunião","Visita"];
 const KB_COLS    = [
   {s:"Novo lead",          l:"Novo Lead",      c:"#2563EB"},
   {s:"Contato pendente",   l:"Pendente",       c:"#7C3AED"},
@@ -169,6 +172,134 @@ const KB_COLS    = [
   {s:"Venda fechada",      l:"✅ Fechado",     c:"#16A34A"},
   {s:"Venda perdida",      l:"❌ Perdido",     c:"#C41E3A"},
 ];
+
+
+
+// ─── MODAL NATIVO ─────────────────────────────────────────────────────────────
+window.fecharModalNativo=function(){
+  const ov=document.getElementById("modal-overlay");
+  if(ov) ov.style.display="none";
+  S.modal=null;
+};
+function abrirModalNativo(title,body,footer){
+  const ov=document.getElementById("modal-overlay");
+  const t=document.getElementById("modal-title");
+  const b=document.getElementById("modal-body");
+  const f=document.getElementById("modal-footer");
+  if(!ov||!t||!b||!f)return;
+  t.textContent=title; b.innerHTML=body; f.innerHTML=footer;
+  ov.style.display="flex";
+  setTimeout(()=>{const el=b.querySelector("textarea,input");if(el)el.focus();},50);
+}
+window.selResp=function(v){
+  const inp=document.getElementById("m-respondeu");
+  const bs=document.getElementById("btn-sim");
+  const bn=document.getElementById("btn-nao");
+  if(!inp||!bs||!bn)return;
+  inp.value=v;
+  if(v==="sim"){
+    bs.style.background="#16A34A";bs.style.color="#fff";bs.style.borderColor="#16A34A";
+    bn.style.background="#fff";bn.style.color="#333";bn.style.borderColor="#E4E4E7";
+  } else {
+    bn.style.background="#FEE2E2";bn.style.color="#C41E3A";bn.style.borderColor="#C41E3A";
+    bs.style.background="#fff";bs.style.color="#333";bs.style.borderColor="#E4E4E7";
+  }
+};
+
+// WhatsApp com mensagem pré-preenchida
+function gerarLinkWhatsApp(l){
+  const tel="55"+l.tel.replace(/\D/g,"");
+  const vendedor=S.user?.nome||"da equipe";
+  const nomeCliente=l.nome.split(" ")[0];
+  const inT=(l.interesse||"").toLowerCase();
+  const interAdj=inT.includes("casa_completa")||inT.includes("casa completa")?"casa completa planejada":
+    inT.includes("cozinha")?"cozinha planejada":
+    inT.includes("dormit")||inT.includes("quarto")?"dormitório planejado":
+    inT.includes("banhe")?"banheiro planejado":
+    (l.interesse||"móveis")+" planejado";
+  const msg=`Olá, ${nomeCliente}! 😊 Tudo bem?`+
+    `
+
+Meu nome é ${vendedor}, da *Italínea Novo Visual* 🏠`+
+    `
+
+Vi que você demonstrou interesse em *${interAdj}*.`+
+    `
+
+Por favor me passe o que imagina do seu projeto para ajudarmos. 🛋️`;
+  return `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
+}
+
+// ─── PERSISTÊNCIA localStorage ────────────────────────────────────────────────
+const STORAGE_KEY = "italinea_crm_v1";
+function salvarDados() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      leads:S.leads, users:S.users, nextUserId:S.nextUserId,
+      metaMensal:S.metaMensal, sheetsUrl:S.sheetsUrl, sheetsFromDate:S.sheetsFromDate,
+      sheetsMapeamento:S.sheetsMapeamento, importLog:S.importLog, lastImport:S.lastImport,
+      user:S.user, salvoEm:new Date().toISOString()
+    }));
+  } catch(e){}
+}
+function carregarDados() {
+  try {
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw)return false;
+    const d=JSON.parse(raw);
+    if(d.leads) S.leads=d.leads.map(prep);
+    if(d.users) S.users=d.users;
+    if(d.nextUserId) S.nextUserId=d.nextUserId;
+    if(d.metaMensal!=null) S.metaMensal=d.metaMensal;
+    if(d.sheetsUrl) S.sheetsUrl=d.sheetsUrl;
+    if(d.sheetsFromDate) S.sheetsFromDate=d.sheetsFromDate;
+    if(d.sheetsMapeamento) S.sheetsMapeamento=d.sheetsMapeamento;
+    if(d.importLog) S.importLog=d.importLog;
+    if(d.lastImport) S.lastImport=d.lastImport;
+    if(d.user) { S.user=d.user; S.screen="dash"; }
+    return true;
+  } catch(e){return false;}
+}
+window.exportarBackup=function(){
+  const dados={versao:"italinea-crm-v1",exportadoEm:new Date().toLocaleString("pt-BR"),
+    leads:S.leads,users:S.users,nextUserId:S.nextUserId,metaMensal:S.metaMensal,
+    sheetsUrl:S.sheetsUrl,sheetsFromDate:S.sheetsFromDate,sheetsMapeamento:S.sheetsMapeamento,importLog:S.importLog};
+  const blob=new Blob([JSON.stringify(dados,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  const data=new Date().toLocaleDateString("pt-BR").replace(/\//g,"-");
+  a.href=url;a.download=`italinea-backup-${data}.json`;a.click();
+  URL.revokeObjectURL(url);
+  toast("✅ Backup exportado!","grn");
+};
+window.importarBackup=function(){
+  const input=document.createElement("input");
+  input.type="file";input.accept=".json";
+  input.onchange=function(e){
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        const d=JSON.parse(ev.target.result);
+        if(!d.versao||d.versao!=="italinea-crm-v1")return alert("Arquivo inválido.");
+        if(!confirm(`Restaurar backup de ${d.exportadoEm}?
+
+Isso substituirá TODOS os dados atuais.`))return;
+        if(d.leads) S.leads=d.leads.map(prep);
+        if(d.users) S.users=d.users;
+        if(d.nextUserId) S.nextUserId=d.nextUserId;
+        if(d.metaMensal!=null) S.metaMensal=d.metaMensal;
+        if(d.sheetsUrl) S.sheetsUrl=d.sheetsUrl;
+        if(d.sheetsFromDate) S.sheetsFromDate=d.sheetsFromDate;
+        if(d.sheetsMapeamento) S.sheetsMapeamento=d.sheetsMapeamento;
+        if(d.importLog) S.importLog=d.importLog;
+        salvarDados();toast("✅ Backup restaurado!","grn");render();
+      }catch(err){alert("Erro: "+err.message);}
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+};
 
 const today = () => new Date().toISOString().split("T")[0];
 const fmtD  = d => d?new Date(d+"T12:00:00").toLocaleDateString("pt-BR"):"—";
@@ -196,7 +327,33 @@ function calcPrio(l){
   if(l.prazo==="Imediato"||o>=30000||(l.prazo==="Até 3 meses"&&l.imovel==="Sim"))return 1;
   if(l.prazo==="Até 3 meses")return 2; if(l.prazo==="Até 6 meses")return 3; return 4;
 }
-function prep(l){const sc=calcScore(l);return{...l,score:sc,prio:calcPrio(l),temp:sc>=70?"Quente":sc>=40?"Morno":"Frio"};}
+function prep(l){
+  const sc=calcScore(l);
+  const prT=(l.prazo||"").toLowerCase();
+  const orT=(l.orc||"").toLowerCase();
+  const inT=(l.interesse||"").toLowerCase();
+  let ptsPrazo=0;
+  if(prT.includes("imedia")) ptsPrazo=4;
+  else if(prT.includes("3_mes")||prT.includes("3 mes")||prT.includes("ate_3")||prT.includes("até 3")) ptsPrazo=3;
+  else if(prT.includes("6_mes")||prT.includes("6 mes")||prT.includes("ate_6")||prT.includes("até 6")) ptsPrazo=1;
+  let ptsOrc=0;
+  if(orT.includes("acima_de_60")||orT.includes("60")) ptsOrc=4;
+  else if(orT.includes("50")) ptsOrc=3;
+  else if(orT.includes("30")) ptsOrc=2;
+  else if(orT.includes("14")) ptsOrc=1;
+  let ptsInt=(inT.includes("casa_completa")||inT.includes("casa completa")||inT.includes("cozinha"))?1:0;
+  const total=ptsPrazo+ptsOrc+ptsInt;
+  let tempAuto="Frio";
+  if(ptsPrazo>=3&&ptsOrc>=2) tempAuto="Quente";
+  else if(total>=3) tempAuto="Morno";
+  if(tempAuto!=="Frio"&&l.entrada){
+    const dias=Math.round((Date.now()-new Date(l.entrada+"T12:00:00").getTime())/(1000*60*60*24));
+    if(dias>=7&&tempAuto==="Quente") tempAuto="Morno";
+    else if(dias>=14) tempAuto="Frio";
+  }
+  if((l.tentativas||0)>=4&&l.status==="Sem resposta") tempAuto="Frio";
+  return{...l,score:sc,prio:calcPrio(l),temp:tempAuto};
+}
 
 // Dados iniciais
 S.leads=[
@@ -300,10 +457,10 @@ function buildApp(){
   const totalAlerts=role==="vendedor"?alertN:alertN+pend;
 
   let nav=[];
-  if(role==="gestor")     nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas do Dia",b:totalAlerts,bc:"amb"},{k:"leads",i:"👥",l:"Leads",b:newN},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"kanban",i:"🗂",l:"Kanban"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"relatorios",i:"📈",l:"Relatórios"},{k:"vendedores",i:"👤",l:"Vendedores"},{k:"sheets",i:"🔗",l:"Google Sheets"}];
+  if(role==="gestor")     nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas do Dia",b:totalAlerts,bc:"amb"},{k:"leads",i:"👥",l:"Leads",b:newN},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"relatorios",i:"📈",l:"Relatórios"},{k:"vendedores",i:"👤",l:"Vendedores"},{k:"sheets",i:"🔗",l:"Google Sheets"},{k:"conta",i:"🔑",l:"Minha Conta"}];
   else if(role==="distrib") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Alertas",b:pend+alertN,bc:"pur"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"leads",i:"👥",l:"Leads"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
-  else if(role==="agencia") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"leads",i:"👥",l:"Leads"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"kanban",i:"🗂",l:"Kanban"},{k:"relatorios",i:"📈",l:"Relatórios"}];
-  else nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Meus Alertas",b:alertN,bc:"amb"},{k:"leads",i:"👥",l:"Meus Leads",b:newN},{k:"kanban",i:"🗂",l:"Kanban"},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
+  else if(role==="agencia") nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"leads",i:"👥",l:"Leads"},{k:"distribuicao",i:"📤",l:"Distribuição",b:pend,bc:"pur"},{k:"relatorios",i:"📈",l:"Relatórios"}];
+  else nav=[{k:"dash",i:"📊",l:"Dashboard"},{k:"alertas",i:"🔔",l:"Meus Alertas",b:alertN,bc:"amb"},{k:"leads",i:"👥",l:"Meus Leads",b:newN},{k:"agenda",i:"📅",l:"Agenda",b:alertN},{k:"conta",i:"🔑",l:"Minha Conta"}];
 
   const TITLES={dash:"Dashboard",alertas:"Alertas do Dia",leads:"Leads",distribuicao:"Distribuição",kanban:"Kanban",agenda:"Agenda",relatorios:"Relatórios",vendedores:"Vendedores",sheets:"Google Sheets",conta:"Minha Conta"};
 
@@ -367,17 +524,12 @@ function buildLogin(){
       <div style="font-size:9px;color:#C41E3A;text-transform:uppercase;letter-spacing:3px;margin-top:2px">Lead Manager</div>
     </div>
     <div style="margin-bottom:12px"><label style="display:block;font-size:11px;color:rgba(255,255,255,.4);margin-bottom:4px">E-mail</label>
-    <input id="li-em" class="li" value="fabio@italinea.com.br" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <input id="li-em" class="li" placeholder="seu@email.com.br" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div style="margin-bottom:16px"><label style="display:block;font-size:11px;color:rgba(255,255,255,.4);margin-bottom:4px">Senha</label>
-    <input id="li-pw" type="password" class="li" value="fabio2025" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <input id="li-pw" type="password" class="li" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div id="li-err" style="display:none" class="alert al-red">❌ E-mail ou senha incorretos</div>
     <button class="btn btn-red btn-full" style="margin-top:8px" onclick="doLogin()">Entrar →</button>
-    <div style="height:1px;background:rgba(255,255,255,.08);margin:16px 0"></div>
-    <div style="font-size:10px;color:rgba(255,255,255,.25)">
-      ${S.users.filter(u=>u.ativo).map(u=>`<div style="margin-bottom:3px;display:flex;align-items:center;gap:5px">
-        <span class="role-tag ${u.role==="gestor"?"rt-g":u.role==="distrib"?"rt-d":u.role==="agencia"?"rt-a":"rt-v"}">${{gestor:"gerente",distrib:"distrib",vendedor:"vendedor",agencia:"agência"}[u.role]}</span>
-        ${u.email} / ${u.pass}</div>`).join("")}
-    </div>
+
   </div></div>`;
 }
 
@@ -1189,6 +1341,7 @@ window.distribuir=function(id,selId){
   const upd=prep({...S.leads.find(x=>x.id===id),vid,distribuidoPor:S.user.id,dataDistrib:today()});
   S.leads=S.leads.map(x=>x.id===id?upd:x);
   toast(`✅ ${upd.nome} → ${vend.nome}`,"grn");
+  salvarDados();
   rerenderContent();
 };
 window.redistribuir=function(id,selId){
@@ -1234,7 +1387,7 @@ window.doFechado=function(){
   if(!val||isNaN(vNum)||vNum<=0)return alert("Informe o valor da venda");
   const upd=prep({...S.sel,status:"Venda fechada",valorVenda:vNum,dataFechamento:fdata});
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; toast("💰 Venda registrada! "+fmtM(vNum),"grn"); rerenderContent();
+  S.sel=upd; S.modal=null; fecharModalNativo(); toast("💰 Venda registrada! "+fmtM(vNum),"grn"); salvarDados(); rerenderContent();
 };
 window.doFollow=function(){
   const data=document.getElementById("m-data")?.value||"";
@@ -1245,7 +1398,7 @@ window.doFollow=function(){
   const upd={...S.sel,follow:data};
   if(obs)upd.hist=[...(S.sel.hist||[]),{data:today(),vendedor:v?.nome||S.user.nome,tipo:canal,resultado:`Follow-up agendado para ${fmtD(data)}`,obs}];
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; toast("📅 Follow-up agendado para "+fmtD(data),"blu"); rerenderContent();
+  S.sel=upd; S.modal=null; fecharModalNativo(); toast("📅 Follow-up agendado para "+fmtD(data),"blu"); salvarDados(); rerenderContent();
 };
 window.doStatus=function(){
   const ns=document.getElementById("m-status")?.value||"";
@@ -1253,7 +1406,7 @@ window.doStatus=function(){
   if(ns==="Venda fechada"){S.modal="fechado";rerenderContent();return;}
   const upd=prep({...S.sel,status:ns});
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; toast("🔄 Status atualizado","blu"); rerenderContent();
+  S.sel=upd; S.modal=null; fecharModalNativo(); toast("🔄 Status atualizado","blu"); salvarDados(); rerenderContent();
 };
 window.doPerdido=function(){
   const motivo=document.getElementById("m-motivo")?.value||"";
@@ -1262,7 +1415,7 @@ window.doPerdido=function(){
   if(motivo==="Outro motivo"&&!outro)return alert("Descreva o motivo");
   const upd=prep({...S.sel,status:"Venda perdida",motivo:motivo==="Outro motivo"?outro:motivo});
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; toast("Venda perdida registrada","red"); rerenderContent();
+  S.sel=upd; S.modal=null; fecharModalNativo(); toast("❌ Venda perdida registrada","red"); salvarDados(); rerenderContent();
 };
 window.doHisto=function(){
   const tipo=document.getElementById("m-tipo")?.value||"WhatsApp";
@@ -1273,21 +1426,21 @@ window.doHisto=function(){
   const n={data:today(),vendedor:v?.nome||S.user.nome,tipo,resultado:res,obs};
   const upd={...S.sel,hist:[...(S.sel.hist||[]),n],tentativas:(S.sel.tentativas||0)+1,respondeu:S.sel.respondeu||res.toLowerCase().includes("respond")};
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; toast("📋 Contato registrado","grn"); rerenderContent();
+  S.sel=upd; S.modal=null; fecharModalNativo(); toast("📋 Contato registrado","grn"); salvarDados(); rerenderContent();
 };
 window.doEditObs=function(){
   const obs=document.getElementById("m-obs-txt")?.value||"";
   const upd={...S.sel,obs};
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
-  S.sel=upd; S.modal=null; toast("✅ Observação salva","blu"); rerenderContent();
+  S.sel=upd; S.modal=null; fecharModalNativo(); toast("✅ Observação salva","blu"); salvarDados(); rerenderContent();
 };
 window.doAddLead=function(){
   const nome=(document.getElementById("al-nome")?.value||"").trim();
   const tel=(document.getElementById("al-tel")?.value||"").trim();
   if(!nome||!tel)return alert("Nome e telefone são obrigatórios");
   const nl=prep({id:Date.now(),nome,tel,email:document.getElementById("al-email")?.value||"",entrada:today(),origem:document.getElementById("al-origem")?.value||"Instagram",interesse:document.getElementById("al-int")?.value||"Cozinha",orc:document.getElementById("al-orc")?.value||"",prazo:document.getElementById("al-prazo")?.value||"Até 3 meses",imovel:document.getElementById("al-imovel")?.value||"Sim",vid:null,distribuidoPor:null,dataDistrib:null,campanha:"Manual",status:"Novo lead",tentativas:0,hist:[],respondeu:false,visitou:false,follow:null,obs:"",valorVenda:null,dataFechamento:null});
-  S.leads=[nl,...S.leads]; S.modal=null;
-  toast("✅ Lead cadastrado! Aguardando distribuição","pur"); rerenderContent();
+  S.leads=[nl,...S.leads]; S.modal=null; fecharModalNativo();
+  toast("✅ Lead cadastrado! Aguardando distribuição","pur"); salvarDados(); rerenderContent();
 };
 
 // VENDEDORES CRUD
@@ -1301,7 +1454,7 @@ window.cadastrarVendedor=function(){
   if(S.users.find(u=>u.email===email))return alert("E-mail já cadastrado");
   const av=nome.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
   S.users.push({id:S.nextUserId++,role,nome,email,pass,av,ativo:true});
-  S.modal=null; toast(`✅ ${nome} cadastrado com sucesso!`,"grn"); render();
+  S.modal=null; fecharModalNativo(); toast(`✅ ${nome} cadastrado com sucesso!`,"grn"); salvarDados(); render();
 };
 window.desativarUser=function(id){
   if(!confirm("Desativar este usuário? Os leads dele serão mantidos."))return;
@@ -1394,13 +1547,15 @@ window.importarSheets=async function(){
       try{
         const nome=getCol(map.nome)>=0?r[getCol(map.nome)]:"Lead importado";
         const nl=prep({id:Date.now()+i,nome,tel,email:getCol(map.email)>=0?r[getCol(map.email)]:"",entrada:today(),origem:getCol(map.origem)>=0?r[getCol(map.origem)]:"Instagram",campanha:"Google Sheets",interesse:getCol(map.interesse)>=0?r[getCol(map.interesse)]||"Cozinha":"Cozinha",orc:getCol(map.orc)>=0?r[getCol(map.orc)]:"",prazo:getCol(map.prazo)>=0?r[getCol(map.prazo)]||"Até 3 meses":"Até 3 meses",imovel:"Não informado",vid:null,distribuidoPor:null,dataDistrib:null,status:"Novo lead",tentativas:0,hist:[],respondeu:false,visitou:false,follow:null,obs:"Importado via Google Sheets",valorVenda:null,dataFechamento:null});
-        S.leads.unshift(nl); telExistentes.add(tel); importados++;
+        // Filtro de data
+      if(S.sheetsFromDate&&nl.entrada&&nl.entrada<S.sheetsFromDate){duplicados++;continue;}
+      S.leads.unshift(nl); telExistentes.add(tel); importados++;
       }catch(e){erros++;}
     }
     const dataHora=new Date().toLocaleString("pt-BR");
     S.lastImport=dataHora;
     S.importLog.push({ok:true,msg:`${importados} lead(s) importado(s). ${duplicados} duplicado(s) ignorado(s).${erros>0?` ${erros} erro(s).`:""}`,data:dataHora});
-    toast(`✅ ${importados} lead(s) importado(s)!`,"grn");
+    toast(`✅ ${importados} lead(s) importado(s)!`,"grn"); salvarDados();
   }catch(e){
     const dataHora=new Date().toLocaleString("pt-BR");
     S.importLog.push({ok:false,msg:`Erro: ${e.message}`,data:dataHora});
@@ -1409,6 +1564,7 @@ window.importarSheets=async function(){
   rerenderContent();
 };
 
+carregarDados();
 render();
 </script>
 </body>
