@@ -1255,11 +1255,20 @@ function buildModal(){
     <div id="m-outro-wrap" style="display:none" class="fg"><label class="fl">Descreva *</label><textarea class="fc" id="m-outro" placeholder="O que aconteceu?"></textarea></div>`;
     footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doPerdido()" style="flex:1">Confirmar</button>`;
   } else if(m==="histo"){
-    title="📋 Registrar Contato";
-    body=`<div class="fg"><label class="fl">Tipo de Contato</label><select class="fc" id="m-tipo">${CANAIS.map(c=>`<option>${c}</option>`).join("")}</select></div>
-    <div class="fg"><label class="fl">Resultado *</label><input class="fc" id="m-res" placeholder="Ex: Respondeu, Agendou visita..."></div>
-    <div class="fg"><label class="fl">Observação</label><textarea class="fc" id="m-hobs" placeholder="Detalhes adicionais..."></textarea></div>`;
-    footer=`<button class="btn" onclick="closeModal()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doHisto()" style="flex:1">Salvar</button>`;
+    const tent=(l?.tentativas||0)+1;
+    const dicas=["📞 Ligue para o cliente — apresente-se e descubra o interesse","Segundo contato — reforce o interesse e tire dúvidas","Terceiro contato — ofereça visita ao showroom","Quarto contato — última tentativa antes de pausar"];
+    const dica=dicas[Math.min(tent-1,3)]||"";
+    title="📋 Registrar Contato #"+tent;
+    body=`<div class="alert al-blu" style="margin-bottom:14px;font-size:12px">💡 ${dica}</div>
+    <div class="fg"><label class="fl">Canal</label><select class="fc" id="m-tipo">${CANAIS.map(c=>`<option>${c}</option>`).join("")}</select></div>
+    <div class="fg"><label class="fl">O cliente respondeu?</label>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button id="btn-sim" type="button" onclick="selResp('sim')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #E4E4E7;background:#fff;cursor:pointer;font-size:13px;font-weight:600">✅ Sim</button>
+      <button id="btn-nao" type="button" onclick="selResp('nao')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #C41E3A;background:#FEE2E2;cursor:pointer;font-size:13px;font-weight:600;color:#C41E3A">❌ Não</button>
+    </div>
+    <input type="hidden" id="m-respondeu" value="nao"></div>
+    <div class="fg"><label class="fl">Observação (opcional)</label><textarea class="fc" id="m-hobs" placeholder="O que aconteceu, o que foi conversado..."></textarea></div>`;
+    footer=`<button class="btn" onclick="fecharModalNativo()" style="flex:1">Cancelar</button><button class="btn btn-red" onclick="doHisto()" style="flex:1">💾 Salvar</button>`;
   } else if(m==="editObs"){
     title="✏️ Observações";
     body=`<div class="fg"><label class="fl">Observações do Lead</label><textarea class="fc" id="m-obs-txt" style="min-height:120px" placeholder="Digite observações...">${l?.obs||""}</textarea></div>`;
@@ -1497,13 +1506,26 @@ window.doPerdido=function(){
   S.sel=upd; S.modal=null; fecharModalNativo(); toast("❌ Venda perdida registrada","red"); salvarDados(); rerenderContent();
 };
 window.doHisto=function(){
-  const tipo=document.getElementById("m-tipo")?.value||"WhatsApp";
-  const res=document.getElementById("m-res")?.value||"";
+  const tipo=document.getElementById("m-tipo")?.value||"Ligação";
+  const respondeu=document.getElementById("m-respondeu")?.value||"nao";
   const obs=document.getElementById("m-hobs")?.value||"";
-  if(!res)return alert("Informe o resultado do contato");
   const v=S.users.find(x=>x.id===S.sel.vid);
-  const n={data:today(),vendedor:v?.nome||S.user.nome,tipo,resultado:res,obs};
-  const upd={...S.sel,hist:[...(S.sel.hist||[]),n],tentativas:(S.sel.tentativas||0)+1,respondeu:S.sel.respondeu||res.toLowerCase().includes("respond")};
+  const agora=new Date();
+  const resultado=respondeu==="sim"?"Cliente respondeu":"Sem resposta";
+  const n={data:today(),hora:agora.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),ts:agora.getTime(),vendedor:v?.nome||S.user.nome,tipo,resultado,obs,respondeu:respondeu==="sim"};
+  const novasTent=(S.sel.tentativas||0)+1;
+  let novoStatus=S.sel.status;
+  if(respondeu==="sim"){if(["Novo lead","Sem resposta","Contato pendente"].includes(S.sel.status))novoStatus="Em atendimento";}
+  else{if(["Novo lead","Contato pendente"].includes(S.sel.status))novoStatus="Sem resposta";}
+  let novoFollow=S.sel.follow;
+  if(respondeu==="nao"){
+    const proxData=new Date(agora);
+    if(novasTent===1)proxData.setHours(proxData.getHours()+4);
+    else if(novasTent===2)proxData.setDate(proxData.getDate()+1);
+    else proxData.setDate(proxData.getDate()+2);
+    novoFollow=proxData.toISOString().split("T")[0];
+  }
+  const upd=prep({...S.sel,hist:[...(S.sel.hist||[]),n],tentativas:novasTent,respondeu:S.sel.respondeu||(respondeu==="sim"),status:novoStatus,follow:novoFollow});
   S.leads=S.leads.map(x=>x.id===S.sel.id?upd:x);
   S.sel=upd; S.modal=null; fecharModalNativo(); toast("📋 Contato registrado","grn"); salvarDados(); rerenderContent();
 };
